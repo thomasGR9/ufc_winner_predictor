@@ -80,25 +80,68 @@ for column in df3.columns:
     if column == 'lose_streak_dif':
         print(i)
 
-df3.iloc[:, 52:67]
+df3.iloc[:, 52:67].columns
+df3.shape[0]
 df3['B_current_lose_streak'].iloc[4891]
 df3['R_current_lose_streak'].iloc[4891]
 df3['lose_streak_dif'].iloc[4891]
-~(df3['B_current_lose_streak'] - df3['R_current_lose_streak'] == df3['lose_streak_dif'])
-
-(df3['win_dif'] == df3['B_wins'] - df3['R_wins']).sum()
 #some diff columns are B - R but some others are mixed
-for i in range(52):
-    if df3.columns[52 - i] == 'B_current_lose_streak':
-        print(i)
+(df3['B_current_lose_streak'] - df3['R_current_lose_streak'] == df3['lose_streak_dif']).sum()
+#mixed
+(df3['B_current_win_streak'] - df3['R_current_win_streak'] == df3['win_streak_dif']).sum()
+#B - R
+(df3['longest_win_streak_dif'] == df3['B_longest_win_streak'] - df3['R_longest_win_streak']).sum()
+#B-R
+(df3['win_dif'] == df3['B_wins'] - df3['R_wins']).sum()
+#B - R
+(df3['loss_dif'] == df3['B_losses'] - df3['R_losses']).sum()
+#mixed
+(df3['total_round_dif'] == df3['B_total_rounds_fought'] - df3['R_total_rounds_fought']).sum()
+#B - R
+(df3['total_title_bout_dif'] == df3['B_total_title_bouts'] - df3['R_total_title_bouts']).sum()
+#B - R
+(df3['ko_dif'] == df3['B_win_by_KO/TKO'] - df3['R_win_by_KO/TKO']).sum()
+#mixed
+(df3['sub_dif'] == df3['B_win_by_Submission'] - df3['R_win_by_Submission']).sum()
+#B-R
+(df3['height_dif'] == df3['B_Height_cms'] - df3['R_Height_cms']).sum()
+#mixed
+(df3['reach_dif'] == df3['B_Reach_cms'] - df3['R_Reach_cms']).sum()
+#mixed
+(df3['age_dif'] == df3['B_age'] - df3['R_age']).sum()
+#mixed
+(df3['sig_str_dif'] == df3['B_avg_SIG_STR_landed'] - df3['R_avg_SIG_STR_landed']).sum()
+#mixed    
+(df3['avg_sub_att_dif'] == df3['B_avg_SUB_ATT'] - df3['R_avg_SUB_ATT']).sum()
+#mixed    
+(df3['avg_td_dif'] == df3['B_avg_TD_landed'] - df3['R_avg_TD_landed']).sum()
+#mixed 
+k = 0
+j = 0
+for i in range(df3.shape[0]):
+    if ~(df3['B_current_lose_streak'] - df3['R_current_lose_streak'] == df3['lose_streak_dif'])[i]:
+        k = k + 1
+        if (df3['R_current_lose_streak'] - df3['B_current_lose_streak'] == df3['lose_streak_dif'])[i]:
+            j = j + 1
 
-for i in range(52):
-    if df3.columns[52 - i] == 'R_current_lose_streak':
-        print(i)
-        
+k / j
+#so when the diff is not B - R s R - B anid not a mistake
+for i in range(df3.shape[0]):
+    if ~(df3['B_current_lose_streak'] - df3['R_current_lose_streak'] == df3['lose_streak_dif'])[i]:
+        if (df3['R_current_lose_streak'] - df3['B_current_lose_streak'] == df3['lose_streak_dif'])[i]:
+            df3['lose_streak_dif'][i] = - df3['lose_streak_dif'][i]
+           
 
+(df3['B_current_lose_streak'] - df3['R_current_lose_streak'] == df3['lose_streak_dif']).sum()
 
+mixed_dif = ['loss_dif', 'ko_dif', 'height_dif', 'reach_dif', 'age_dif', 'sig_str_dif', 'avg_sub_att_dif', 'avg_td_dif']
+mixed_B = ['B_losses', 'B_win_by_KO/TKO', 'B_Height_cms', 'B_Reach_cms', 'B_age', 'B_avg_SIG_STR_landed', 'B_avg_SUB_ATT', 'B_avg_TD_landed']
+mixed_R = ['R_losses', 'R_win_by_KO/TKO', 'R_Height_cms', 'R_Reach_cms', 'R_age', 'R_avg_SIG_STR_landed', 'R_avg_SUB_ATT', 'R_avg_TD_landed']
 
-        
-    
-    
+for j in range(len(mixed_dif)):
+    for i in range(df3.shape[0]):
+        if ~(df3[mixed_B[j]] - df3[mixed_R[j]] == df3[mixed_dif[j]])[i]:
+            if (df3[mixed_R[j]] - df3[mixed_B[j]] == df3[mixed_dif[j]])[i]:
+                df3[mixed_dif[j]][i] = - df3[mixed_dif[j]][i]
+    print((df3[mixed_B[j]] - df3[mixed_R[j]] == df3[mixed_dif[j]]).sum())
+
