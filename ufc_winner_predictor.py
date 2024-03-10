@@ -1,5 +1,5 @@
 import pandas as pd 
-df = pd.read_csv('../datasets/ufc-master.csv')
+df = pd.read_csv('../../datasets/ufc-master.csv')
 for column in df.columns:
     print(column)
 
@@ -139,9 +139,106 @@ mixed_B = ['B_losses', 'B_win_by_KO/TKO', 'B_Height_cms', 'B_Reach_cms', 'B_age'
 mixed_R = ['R_losses', 'R_win_by_KO/TKO', 'R_Height_cms', 'R_Reach_cms', 'R_age', 'R_avg_SIG_STR_landed', 'R_avg_SUB_ATT', 'R_avg_TD_landed']
 
 for j in range(len(mixed_dif)):
+    print(j)
     for i in range(df3.shape[0]):
         if ~(df3[mixed_B[j]] - df3[mixed_R[j]] == df3[mixed_dif[j]])[i]:
             if (df3[mixed_R[j]] - df3[mixed_B[j]] == df3[mixed_dif[j]])[i]:
                 df3[mixed_dif[j]][i] = - df3[mixed_dif[j]][i]
     print((df3[mixed_B[j]] - df3[mixed_R[j]] == df3[mixed_dif[j]]).sum())
 
+#so not only the first and the fifth dif fixed
+
+
+for j in range(len(mixed_dif)):
+    k = 0
+    l = 0
+    print(j)
+    for i in range(df3.shape[0]):
+        if ~(df3[mixed_B[j]] - df3[mixed_R[j]] == df3[mixed_dif[j]])[i]:
+            k = k + 1
+            if (df3[mixed_R[j]] - df3[mixed_B[j]] == df3[mixed_dif[j]])[i]:
+                l = l + 1
+    print(f"k is {k}, l is {l}")
+
+#So we verify that the occurances where the diff is not B - R is not R - B either, lets see what it is
+k = 0
+for i in range(df3.shape[0]):
+    if ~(df3['ko_dif'] == df3['B_win_by_KO/TKO'] - df3['R_win_by_KO/TKO'])[i]:
+        k = k + 1
+        print(k)
+        print(f"diff is {df3['ko_dif'][i]}, B is {df3['B_win_by_KO/TKO'][i]}, R is {df3['R_win_by_KO/TKO'][i]}")
+
+(df3['ko_dif'] == df3['B_win_by_KO/TKO'] - df3['R_win_by_KO/TKO']).sum()
+~(df3['R_win_by_TKO_Doctor_Stoppage'] == 0).sum() 
+~(df3['R_win_by_KO/TKO'] == 0).sum() 
+~(df3['ko_dif'] == df3['B_win_by_TKO_Doctor_Stoppage'] - df3['R_win_by_TKO_Doctor_Stoppage']).sum()
+#is not just different columns
+for j in range(len(mixed_dif)):
+    print(j)
+    for i in range(df3.shape[0]):
+        if ~(df3[mixed_B[j]] - df3[mixed_R[j]] == df3[mixed_dif[j]])[i]:
+            df3[mixed_dif[j]][i] = df3[mixed_B[j]][i] - df3[mixed_R[j]][i] 
+    print((df3[mixed_B[j]] - df3[mixed_R[j]] == df3[mixed_dif[j]]).sum())
+
+for j in range(len(mixed_dif)):
+    print((df3[mixed_B[j]] - df3[mixed_R[j]] == df3[mixed_dif[j]]).sum())
+    print((df3[mixed_R[j]] - df3[mixed_B[j]] == df3[mixed_dif[j]]).sum())
+
+#the last 3 columns of this list is not working maybe because of nans?
+for j in range(5, 8):
+    print(f"no of nans in {mixed_B[j]} is {df3[mixed_B[j]].isna().sum()}")
+    print(f"no of nans in {mixed_R[j]} is {df3[mixed_R[j]].isna().sum()}")  
+
+#yes they have nans, we will impute the B and R columns with the mean diff column with 0
+
+df5 = df3.copy()
+
+
+
+values = {"sig_str_dif": 0,"avg_sub_att_dif": 0,"avg_td_dif": 0}
+df5.fillna(value=values, inplace=True)
+mean_list = ['B_avg_SIG_STR_landed', 'B_avg_SUB_ATT', 'B_avg_TD_landed', 'R_avg_SIG_STR_landed', 'R_avg_SUB_ATT', 'R_avg_TD_landed']
+for j in range(len(mean_list)):
+    df5[mean_list[j]].fillna(int(df5[mean_list[j]].mean()), inplace=True)
+    
+df5[mean_list[0]].isna().sum()
+df5['sig_str_dif']
+
+df5.drop(["sig_str_diff" ,"avg_sub_att_diff" ,"avg_td_diff"], axis=1, inplace=True)
+df5.columns
+df5['Rank_dif'] = df5['B_rank'] - df5['R_rank']
+(df5['Rank_dif'] < 0).sum()
+#we will then drop the B and R rank because we filled the nan values with 16 witch is not true and just served for the dif
+
+df5.drop(["R_rank" ,"B_rank"], axis=1, inplace=True)
+
+df5.columns
+for i in range(len(df5.columns)):
+    if df5.columns[i] == 'R_Women\'s Flyweight_rank':
+        print(i)
+
+rank_columns = []
+for i in range(61, 85):
+    rank_columns.append(df5.columns[i])
+
+rank_columns
+
+df5.drop(rank_columns, axis=1, inplace=True)
+df5.columns
+#we will see the remaining columns with Nans
+
+for column in df5.columns:
+    if (~df5[column].isna()).sum() < 4896:
+        print(column)
+
+df5['B_Stance'].value_counts()
+
+(df5['B_Stance'] == 'Switch').sum()
+(df5['B_Stance'] == 'Switch ').sum()
+
+df5.replace({'B_Stance': 'Switch '}, 'Switch', inplace=True)
+df5['B_Stance'].value_counts()
+df5.replace({'B_Stance': 'Open Stance'}, 'Orthodox', inplace=True)
+df5['B_Stance'].value_counts()
+df5['B_Stance'].fillna('Orthodox', inplace=True)
+df5['B_Stance'].isna().sum()
