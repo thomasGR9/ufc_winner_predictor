@@ -204,7 +204,7 @@ for j in range(len(mean_list)):
 df5[mean_list[0]].isna().sum()
 df5['sig_str_dif']
 
-df5.drop(["sig_str_diff" ,"avg_sub_att_diff" ,"avg_td_diff"], axis=1, inplace=True)
+
 df5.columns
 df5['Rank_dif'] = df5['B_rank'] - df5['R_rank']
 (df5['Rank_dif'] < 0).sum()
@@ -212,19 +212,21 @@ df5['Rank_dif'] = df5['B_rank'] - df5['R_rank']
 
 df5.drop(["R_rank" ,"B_rank"], axis=1, inplace=True)
 
-df5.columns
+len(df5.columns)
 for i in range(len(df5.columns)):
     if df5.columns[i] == 'R_Women\'s Flyweight_rank':
         print(i)
 
 rank_columns = []
-for i in range(61, 85):
+for i in range(67, 91):
     rank_columns.append(df5.columns[i])
 
 rank_columns
 
 df5.drop(rank_columns, axis=1, inplace=True)
+
 df5.columns
+
 #we will see the remaining columns with Nans
 
 for column in df5.columns:
@@ -242,3 +244,102 @@ df5.replace({'B_Stance': 'Open Stance'}, 'Orthodox', inplace=True)
 df5['B_Stance'].value_counts()
 df5['B_Stance'].fillna('Orthodox', inplace=True)
 df5['B_Stance'].isna().sum()
+#for the missing values of SIG_STR_pct we will first collect the values of SIG_STR_landed with the same indexes witch are available
+
+indexes_of_nans = []
+for i in range(df5.shape[0]):
+    if df5['B_avg_SIG_STR_pct'].isna()[i]:
+        indexes_of_nans.append(i)
+
+len(indexes_of_nans)
+sig_str_landed_of_nan_pct = []
+
+for index in indexes_of_nans:
+    sig_str_landed_of_nan_pct.append(df5['B_avg_SIG_STR_landed'][index])
+
+len(sig_str_landed_of_nan_pct)
+j=0
+for i in range(len(sig_str_landed_of_nan_pct)):
+    if sig_str_landed_of_nan_pct[i] == 26:
+        j = j + 1
+        
+print(j)
+#all values are 26
+(df5['B_avg_SIG_STR_landed'] == 26).sum()
+#we will impute the nans of the pct column with the mean of this column for the fighters that have avg_sig_str_landed = 26 and not nan pct.We feel that is the most representative value
+pct_mean_impute = df5[df5['B_avg_SIG_STR_landed'] == 26]['B_avg_SIG_STR_pct'].mean(skipna=True)
+df5['B_avg_SIG_STR_pct'].fillna(pct_mean_impute, inplace=True)
+df5['B_avg_SIG_STR_pct'].isna().sum()
+
+df5['R_avg_SIG_STR_pct'].isna().sum()
+indexes_of_nans_R = []
+for i in range(df5.shape[0]):
+    if df5['R_avg_SIG_STR_pct'].isna()[i]:
+        indexes_of_nans_R.append(i)
+
+indexes_of_nans_R
+sig_str_landed_of_nan_pct_R = []
+for index in indexes_of_nans_R:
+    sig_str_landed_of_nan_pct_R.append(df5['R_avg_SIG_STR_landed'][index])
+
+sig_str_landed_of_nan_pct_R
+len(sig_str_landed_of_nan_pct_R)
+j=0
+for i in range(len(sig_str_landed_of_nan_pct_R)):
+    if sig_str_landed_of_nan_pct_R[i] == 27:
+        j = j + 1
+
+print(j)
+#so all the values are nans,so as before we will impute all the nans of the pct column with the mean of the remaining pct of all the figters with 27 sig_str_landed
+(df5['R_avg_SIG_STR_landed'] == 27).sum()
+pct_mean_impute_R = df5[df5['R_avg_SIG_STR_landed'] == 27]['R_avg_SIG_STR_pct'].mean(skipna=True)
+df5['R_avg_SIG_STR_pct'].fillna(pct_mean_impute_R, inplace=True)
+df5['R_avg_SIG_STR_pct'].isna().sum()
+
+df5['B_avg_TD_pct'].isna().sum()
+
+nan_td_pct_indexes_B = []
+for i in range(df5.shape[0]):
+    if df5['B_avg_TD_pct'].isna()[i]:
+        nan_td_pct_indexes_B.append(i)
+nan_td_pct_indexes_B
+len(nan_td_pct_indexes_B)
+td_landed_of_nanpct_B = []
+for index in nan_td_pct_indexes_B:
+    td_landed_of_nanpct_B.append(df5['B_avg_TD_landed'][index])
+    
+td_landed_of_nanpct_B
+l = 0
+for value in td_landed_of_nanpct_B:
+    l = l + value
+
+print(f"mean value of list is {l / len(td_landed_of_nanpct_B)}")
+#is basically 1 so we will impute like the sig_str columns
+impute_TD_pct_B = df5[df5['B_avg_TD_landed'] == 1]['B_avg_TD_pct'].mean(skipna=True)
+df5['B_avg_TD_pct'].fillna(impute_TD_pct_B, inplace=True)
+df5['B_avg_TD_pct'].isna().sum()
+
+df5['R_avg_TD_pct'].isna().sum()
+
+nan_td_pct_indexes_R = []
+for i in range(df5.shape[0]):
+    if df5['R_avg_TD_pct'].isna()[i]:
+        nan_td_pct_indexes_R.append(i)
+nan_td_pct_indexes_R
+len(nan_td_pct_indexes_R)
+td_landed_of_nanpct_R = []
+for index in nan_td_pct_indexes_R:
+    td_landed_of_nanpct_R.append(df5['R_avg_TD_landed'][index])
+    
+td_landed_of_nanpct_R
+l = 0
+for value in td_landed_of_nanpct_R:
+    l = l + value
+
+print(f"mean value of list is {l / len(td_landed_of_nanpct_R)}")
+#so 1 in this case too,we will impute with the same logic again
+impute_TD_pct_R = df5[df5['R_avg_TD_landed'] == 1]['R_avg_TD_pct'].mean(skipna=True)
+df5['R_avg_TD_pct'].fillna(impute_TD_pct_R, inplace=True)
+df5['B_avg_TD_pct'].isna().sum()
+
+#so we are done with the nans in the dataset
