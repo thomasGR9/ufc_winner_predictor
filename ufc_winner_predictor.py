@@ -189,7 +189,7 @@ for j in range(5, 8):
     print(f"no of nans in {mixed_B[j]} is {df3[mixed_B[j]].isna().sum()}")
     print(f"no of nans in {mixed_R[j]} is {df3[mixed_R[j]].isna().sum()}")  
 
-#yes they have nans, we will impute the B and R columns with the mean diff column with 0
+#yes they have nans, we will impute the B and R columns with the mean, and the diff column with 0
 
 df5 = df3.copy()
 
@@ -244,6 +244,11 @@ df5.replace({'B_Stance': 'Open Stance'}, 'Orthodox', inplace=True)
 df5['B_Stance'].value_counts()
 df5['B_Stance'].fillna('Orthodox', inplace=True)
 df5['B_Stance'].isna().sum()
+
+df5['R_Stance'].value_counts()
+df5.replace({'R_Stance': 'Open Stance'}, 'Orthodox', inplace=True)
+df5['R_Stance'].value_counts()
+df5['R_Stance'].isna().sum()
 #for the missing values of SIG_STR_pct we will first collect the values of SIG_STR_landed with the same indexes witch are available
 
 indexes_of_nans = []
@@ -343,3 +348,35 @@ df5['R_avg_TD_pct'].fillna(impute_TD_pct_R, inplace=True)
 df5['B_avg_TD_pct'].isna().sum()
 
 #so we are done with the nans in the dataset
+
+
+len(df5.columns)
+import numpy as np
+df5.columns
+#the columns we will use to predict the winner have relative importance to the gender and weight of the fighters.To avoid biases we will stratify according to weight_class witch combines the two factors by specifying womans and mans weight class
+df5['weight_class'].value_counts() 
+#so we can drop the gender and weight columns because their information is in the weight class column
+df5.drop(['gender', 'B_Weight_lbs', 'R_Weight_lbs'], axis=1, inplace=True)
+y = df5['Winner']
+x = df5.drop(['Winner'], axis=1)
+from sklearn.model_selection import train_test_split
+X_train, X_test, y_train, y_test = train_test_split(x, y, stratify=x['weight_class'], test_size=0.2, shuffle=True)
+df5['weight_class'].value_counts() / df5.shape[0]
+X_train['weight_class'].value_counts() / X_train.shape[0]
+X_test['weight_class'].value_counts() / X_test.shape[0]
+#about the same.Now we can drop the weight class column from test and train dataset since we only needed it for the stratification
+X_train.drop(['weight_class'], axis=1, inplace=True)
+X_test.drop(['weight_class'], axis=1, inplace=True)
+X_train.reset_index(drop=True, inplace=True)
+X_test.reset_index(drop=True, inplace=True)
+len(X_test.columns)
+X_test_cat = X_test.select_dtypes(exclude=np.number)
+X_train_cat = X_train.select_dtypes(exclude=np.number)
+X_test_num = X_test.select_dtypes(include=np.number)
+X_train_num = X_train.select_dtypes(include=np.number)
+X_train_cat['R_Stance'].value_counts()
+
+from sklearn.preprocessing import OneHotEncoder
+cat_encoder = OneHotEncoder()
+train_cat_en = cat_encoder.fit_transform(X_train_cat)
+X_train_cat_en = pd.DataFrame(train_cat_en, columns=cat_encoder.get_feature_names_out(), index=X_train_cat.index )
