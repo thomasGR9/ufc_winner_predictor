@@ -379,4 +379,15 @@ X_train_cat['R_Stance'].value_counts()
 from sklearn.preprocessing import OneHotEncoder
 cat_encoder = OneHotEncoder()
 train_cat_en = cat_encoder.fit_transform(X_train_cat)
-X_train_cat_en = pd.DataFrame(train_cat_en, columns=cat_encoder.get_feature_names_out(), index=X_train_cat.index )
+X_train_cat_en = pd.DataFrame(train_cat_en.toarray(), columns=cat_encoder.get_feature_names_out(), index=X_train_cat.index )
+X_train_cat_en
+cat_encoder.transform(X_test_cat).toarray()
+X_test_cat_en = pd.DataFrame(cat_encoder.transform(X_test_cat).toarray(), columns=cat_encoder.get_feature_names_out(), index=X_test_cat.index )
+y_train.reset_index(drop=True, inplace=True)
+y_test.reset_index(drop=True, inplace=True)
+cat_encoder_y = OneHotEncoder()
+train_cat_en_y = cat_encoder_y.fit_transform(pd.DataFrame(y_train, columns = ['Winner'], index = y_train.index))
+y_train_en = pd.DataFrame(train_cat_en_y.toarray(), columns=cat_encoder_y.get_feature_names_out(), index=y_train.index )
+test_cat_en_y = cat_encoder_y.fit_transform(pd.DataFrame(y_test, columns = ['Winner'], index = y_test.index))
+y_test_en = pd.DataFrame(test_cat_en_y.toarray(), columns=cat_encoder_y.get_feature_names_out(), index=y_test.index)
+
