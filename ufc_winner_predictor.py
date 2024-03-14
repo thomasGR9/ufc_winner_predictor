@@ -391,3 +391,56 @@ y_train_en = pd.DataFrame(train_cat_en_y.toarray(), columns=cat_encoder_y.get_fe
 test_cat_en_y = cat_encoder_y.fit_transform(pd.DataFrame(y_test, columns = ['Winner'], index = y_test.index))
 y_test_en = pd.DataFrame(test_cat_en_y.toarray(), columns=cat_encoder_y.get_feature_names_out(), index=y_test.index)
 
+X_train_num.columns
+#lets handle the numerical columns
+import matplotlib.pyplot as plt
+for column in X_train_num.columns:
+    X_train_num[column].hist(legend=True)
+    plt.show()
+
+X_train_num['B_win_by_Decision_Majority'].value_counts(normalize=True)
+X_train_num['R_win_by_Decision_Majority'].value_counts(normalize=True)
+j = 0
+for i in range(len(X_train_num['B_win_by_Decision_Majority'])):
+    if X_train_num['B_win_by_Decision_Majority'][i] == X_train_num['R_win_by_Decision_Majority'][i]:
+        j = j + 1
+print(f"percentage same wins by majority decision {j / len(X_train['B_win_by_Decision_Majority'])*100}%") 
+#so we have this columns with roughly the same values and nearly all of the equal to 0.Its best to drop them
+X_test_num.drop(['B_win_by_Decision_Majority', 'R_win_by_Decision_Majority'], axis=1, inplace=True)
+X_train_num.drop(['B_win_by_Decision_Majority', 'R_win_by_Decision_Majority'], axis=1, inplace=True)
+
+X_train_num['B_draw'].value_counts(normalize=True)
+X_train_num['R_draw'].value_counts(normalize=True)
+#the same with the draws
+X_test_num.drop(['B_draw', 'R_draw'], axis=1, inplace=True)
+X_train_num.drop(['B_draw', 'R_draw'], axis=1, inplace=True)
+
+X_train_num['B_total_title_bouts'].value_counts(normalize=True)
+X_train_num['R_total_title_bouts'].value_counts(normalize=True)
+X_train_num['B_total_title_bouts'].hist()
+#not dropping it
+
+X_train_num['B_win_by_TKO_Doctor_Stoppage'].value_counts(normalize=True)
+X_train_num['R_win_by_TKO_Doctor_Stoppage'].value_counts(normalize=True)
+X_train_num['B_win_by_TKO_Doctor_Stoppage'].hist()
+#dropping this too
+X_test_num.drop(['B_win_by_TKO_Doctor_Stoppage', 'R_win_by_TKO_Doctor_Stoppage'], axis=1, inplace=True)
+X_train_num.drop(['B_win_by_TKO_Doctor_Stoppage', 'R_win_by_TKO_Doctor_Stoppage'], axis=1, inplace=True)
+
+for column in X_train_num.columns:
+    X_train_num[column].hist(legend=True)
+    plt.show()
+
+"""
+from sklearn.preprocessing import StandardScaler
+std_scaler = StandardScaler()
+X_train_num_scaled_values = std_scaler.fit_transform(X_train_num)
+std_scaler.get_feature_names_out()
+X_train_num_scaled = pd.DataFrame(X_train_num_scaled_values, columns=std_scaler.get_feature_names_out(), index=X_train_num.index)
+
+X_test_num_scaled_values = std_scaler.transform(X_test_num)
+X_test_num_scaled = pd.DataFrame(X_test_num_scaled_values, columns=std_scaler.get_feature_names_out(), index=X_test_num.index)
+
+
+X_train_num_scaled
+"""
