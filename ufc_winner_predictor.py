@@ -427,9 +427,7 @@ X_train_num['B_win_by_TKO_Doctor_Stoppage'].hist()
 X_test_num.drop(['B_win_by_TKO_Doctor_Stoppage', 'R_win_by_TKO_Doctor_Stoppage'], axis=1, inplace=True)
 X_train_num.drop(['B_win_by_TKO_Doctor_Stoppage', 'R_win_by_TKO_Doctor_Stoppage'], axis=1, inplace=True)
 
-for column in X_train_num.columns:
-    X_train_num[column].hist(legend=True)
-    plt.show()
+
 
 """
 from sklearn.preprocessing import StandardScaler
@@ -443,4 +441,177 @@ X_test_num_scaled = pd.DataFrame(X_test_num_scaled_values, columns=std_scaler.ge
 
 
 X_train_num_scaled
+"""
+
+
+
+#Lets check for outliers
+
+def plot_binary_outliers(dataset, col, outlier_col, reset_index):
+    """ Plot outliers in case of a binary outlier score. Here, the col specifies the real data
+    column and outlier_col the columns with a binary value (outlier or not).
+
+    Args:
+        dataset (pd.DataFrame): The dataset
+        col (string): Column that you want to plot
+        outlier_col (string): Outlier column marked with true/false
+        reset_index (bool): whether to reset the index for plotting
+    """
+
+    # Taken from: https://github.com/mhoogen/ML4QS/blob/master/Python3Code/util/VisualizeDataset.py
+
+    dataset = dataset.dropna(axis=0, subset=[col, outlier_col])
+    dataset[outlier_col] = dataset[outlier_col].astype("bool")
+
+    if reset_index:
+        dataset = dataset.reset_index()
+
+    fig, ax = plt.subplots()
+
+    plt.xlabel("samples")
+    plt.ylabel("value")
+
+    # Plot non outliers in default color
+    ax.plot(
+        dataset.index[~dataset[outlier_col]],
+        dataset[col][~dataset[outlier_col]],
+        "+",
+    )
+    # Plot data points that are outliers in red
+    ax.plot(
+        dataset.index[dataset[outlier_col]],
+        dataset[col][dataset[outlier_col]],
+        "r+",
+    )
+
+    plt.legend(
+        ["outlier " + col, "no outlier " + col],
+        loc="upper center",
+        ncol=2,
+        fancybox=True,
+        shadow=True,
+    )
+    plt.show()
+
+
+def mark_outliers_iqr(dataset, col):
+    """Function to mark values as outliers using the IQR method.
+
+    Args:
+        dataset (pd.DataFrame): The dataset
+        col (string): The column you want apply outlier detection to
+
+    Returns:
+        pd.DataFrame: The original dataframe with an extra boolean column 
+        indicating whether the value is an outlier or not.
+    """
+
+    
+
+    Q1 = dataset[col].quantile(0.25)
+    Q3 = dataset[col].quantile(0.75)
+    IQR = Q3 - Q1
+
+    lower_bound = Q1 - 1.5 * IQR
+    upper_bound = Q3 + 1.5 * IQR
+
+    dataset[col + "_outlier"] = (dataset[col] < lower_bound) | (
+        dataset[col] > upper_bound
+    )
+
+    return dataset
+
+plot_X_train_num = X_train_num.copy()
+
+for column in plot_X_train_num.columns:
+    mark_outliers_iqr(plot_X_train_num, column)
+
+
+
+for column in X_train_num.columns:
+    plot_binary_outliers(plot_X_train_num, column, column + '_outlier', False)
+    
+#cols to note with this criterion: ['B_avg_TD_pct', 'B_Height_cms', 'B_Reach_cms, 'R_avg_TD_pct', 'R_age', 'B_age']
+#we see that with the iqr method many of the columns have a lot of outliers that we can not exlude,lets try another approach
+    
+plot_X_train_num_Chauvenets = X_train_num.copy()
+import math
+import scipy
+def mark_outliers_chauvenet(dataset, col, C=2):
+    """Finds outliers in the specified column of datatable and adds a binary column with
+    the same name extended with '_outlier' that expresses the result per data point.
+    
+    Taken from: https://github.com/mhoogen/ML4QS/blob/master/Python3Code/Chapter3/OutlierDetection.py
+
+    Args:
+        dataset (pd.DataFrame): The dataset
+        col (string): The column you want apply outlier detection to
+        C (int, optional): Degree of certainty for the identification of outliers given the assumption 
+                           of a normal distribution, typicaly between 1 - 10. Defaults to 2.
+
+    Returns:
+        pd.DataFrame: The original dataframe with an extra boolean column 
+        indicating whether the value is an outlier or not.
+    """
+
+    # Compute the mean and standard deviation.
+    mean = dataset[col].mean()
+    std = dataset[col].std()
+    N = len(dataset.index)
+    criterion = 1.0 / (C * N)
+
+    # Consider the deviation for the data points.
+    deviation = abs(dataset[col] - mean) / std
+
+    # Express the upper and lower bounds.
+    low = -deviation / math.sqrt(C)
+    high = deviation / math.sqrt(C)
+    prob = []
+    mask = []
+
+    # Pass all rows in the dataset.
+    for i in range(0, len(dataset.index)):
+        # Determine the probability of observing the point
+        prob.append(
+            1.0 - 0.5 * (scipy.special.erf(high[i]) - scipy.special.erf(low[i]))
+        )
+        # And mark as an outlier when the probability is below our criterion.
+        mask.append(prob[i] < criterion)
+    dataset[col + "_outlier"] = mask
+    return dataset
+
+for column in X_train_num.columns:
+    mark_outliers_chauvenet(plot_X_train_num_Chauvenets, column)
+
+
+#we should consider tho that the Chauvenet's works best for data that follows a normal distribution.So if we configure some outliers based on this criterion we will do so if the distribution seems normal.
+normal_dist_col = ['B_avg_SIG_STR_pct', 'B_avg_TD_pct', 'B_Height_cms', 'B_Reach_cms','R_avg_SIG_STR_pct', 'R_avg_TD_pct', 'R_Height_cms', 'R_Reach_cms' ,'lose_streak_dif', 'win_streak_dif', 'longest_win_streak_dif', 'win_dif', 'loss_dif', 'total_round_dif', 'total_title_bout_dif', 'ko_dif', 'sub_dif', 'height_dif', 'reach_dif', 'age_dif', 'sig_str_dif', 'avg_sub_att_dif', 'avg_td_dif', 'Rank_dif']
+
+for column in normal_dist_col:
+    plot_binary_outliers(plot_X_train_num_Chauvenets, column, column + '_outlier', False)
+    
+
+#cols to note with this criterion: ['B_avg_SIG_STR_pct', 'R_avg_SIG_STR_pct', 'longest_win_streak_dif', 'win_dif', 'loss_dif', 'total_round_dif', 'height_dif']
+#we didint include some cols to note that we think that its not proper to change the values of them (eg total Takedown dif because of styles of fighters etc)
+
+
+"""
+for column in X_train_num.columns:
+    X_train_num[column].hist(legend=True)
+    plt.show()
+
+heavy_tail_num_cols_B = ['B_current_lose_streak', 'B_current_win_streak', 'B_avg_SIG_STR_landed', 'B_avg_SUB_ATT', 'B_avg_TD_landed', 'B_longest_win_streak', 'B_losses','B_total_rounds_fought', 'B_win_by_Decision_Unanimous', 'B_win_by_KO/TKO', 'B_win_by_Submission', 'B_wins']
+
+for column in heavy_tail_num_cols_B:
+    fig, (ax1, ax2, ax3) = plt.subplots(3, 1)
+    ax2.hist(np.sqrt(X_train_num[column]))
+    ax1.hist(X_train_num[column])
+    ax3.hist(np.log10(X_train_num[column] + 0.00000000000001)) #to avoid log(0) = inf
+    ax1.set_title(column)
+    ax2.set_title('sqrt' + column)
+    ax3.set_title('log' + column)
+    plt.show()
+    
+#we see that the sqrt approach makes the histogram effectively more bell curved for the next cols
+cols_for_sqrt = ['B_avg_SIG_STR_landed', 'B_avg_TD_landed', 'B_longest_win_streak', 'B_total_rounds_fought', 'B_wins'. 'R_avg_SIG_STR_landed', 'R_avg_TD_landed', 'R_longest_win_streak', 'R_total_rounds_fought', 'R_wins']
 """
