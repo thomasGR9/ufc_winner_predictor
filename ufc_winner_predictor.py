@@ -385,11 +385,10 @@ cat_encoder.transform(X_test_cat).toarray()
 X_test_cat_en = pd.DataFrame(cat_encoder.transform(X_test_cat).toarray(), columns=cat_encoder.get_feature_names_out(), index=X_test_cat.index )
 y_train.reset_index(drop=True, inplace=True)
 y_test.reset_index(drop=True, inplace=True)
-cat_encoder_y = OneHotEncoder()
-train_cat_en_y = cat_encoder_y.fit_transform(pd.DataFrame(y_train, columns = ['Winner'], index = y_train.index))
-y_train_en = pd.DataFrame(train_cat_en_y.toarray(), columns=cat_encoder_y.get_feature_names_out(), index=y_train.index )
-test_cat_en_y = cat_encoder_y.fit_transform(pd.DataFrame(y_test, columns = ['Winner'], index = y_test.index))
-y_test_en = pd.DataFrame(test_cat_en_y.toarray(), columns=cat_encoder_y.get_feature_names_out(), index=y_test.index)
+#We will replace the red with 0 and blue with 1
+y_train.replace(['Red', 'Blue'], [0, 1], inplace=True)
+y_test.replace(['Red', 'Blue'], [0, 1], inplace=True)
+
 
 X_train_num.columns
 #lets handle the numerical columns
@@ -427,24 +426,23 @@ X_train_num['B_win_by_TKO_Doctor_Stoppage'].hist()
 X_test_num.drop(['B_win_by_TKO_Doctor_Stoppage', 'R_win_by_TKO_Doctor_Stoppage'], axis=1, inplace=True)
 X_train_num.drop(['B_win_by_TKO_Doctor_Stoppage', 'R_win_by_TKO_Doctor_Stoppage'], axis=1, inplace=True)
 
+#now we will use some Random Forests to check the feature importance's 
+from sklearn.ensemble import RandomForestClassifier
+rnd_clf = RandomForestClassifier(n_estimators=500, random_state=42, max_leaf_nodes=16, class_weight="balanced_subsample")  
 
-
-"""
-from sklearn.preprocessing import StandardScaler
-std_scaler = StandardScaler()
-X_train_num_scaled_values = std_scaler.fit_transform(X_train_num)
-std_scaler.get_feature_names_out()
-X_train_num_scaled = pd.DataFrame(X_train_num_scaled_values, columns=std_scaler.get_feature_names_out(), index=X_train_num.index)
-
-X_test_num_scaled_values = std_scaler.transform(X_test_num)
-X_test_num_scaled = pd.DataFrame(X_test_num_scaled_values, columns=std_scaler.get_feature_names_out(), index=X_test_num.index)
-
-
-X_train_num_scaled
-"""
-
-
-
+rnd_clf.fit(X_train_num, y_train)
+for score, name in zip(rnd_clf.feature_importances_, X_train_num.columns):
+    print(round(score, 3), name)
+    
+#lets see every feature that has lower than 0.007 feature importance
+for score, name in zip(rnd_clf.feature_importances_, X_train_num.columns):
+    if score < 0.008:
+        print(round(score, 3), name)
+    
+#we choose to drop every feature that has both R and B, and some others as well
+X_train_num.drop(['B_current_lose_streak', 'B_total_title_bouts', 'B_win_by_Decision_Unanimous', 'B_win_by_KO/TKO', 'B_win_by_Submission','R_current_lose_streak', 'R_total_title_bouts', 'R_win_by_Decision_Unanimous', 'R_win_by_KO/TKO', 'R_win_by_Submission', 'no_of_rounds', 'total_title_bout_dif', 'lose_streak_dif'], axis=1, inplace=True)
+X_test_num.drop(['B_current_lose_streak', 'B_total_title_bouts', 'B_win_by_Decision_Unanimous', 'B_win_by_KO/TKO', 'B_win_by_Submission','R_current_lose_streak', 'R_total_title_bouts', 'R_win_by_Decision_Unanimous', 'R_win_by_KO/TKO', 'R_win_by_Submission', 'no_of_rounds', 'total_title_bout_dif', 'lose_streak_dif'], axis=1, inplace=True)
+X_train_num.columns
 #Lets check for outliers
 
 def plot_binary_outliers(dataset, col, outlier_col, reset_index):
@@ -521,17 +519,18 @@ def mark_outliers_iqr(dataset, col):
 
     return dataset
 
-plot_X_train_num = X_train_num.copy()
+plot_X_train_num_iqr = X_train_num.copy()
 
-for column in plot_X_train_num.columns:
-    mark_outliers_iqr(plot_X_train_num, column)
+for column in plot_X_train_num_iqr.columns:
+    mark_outliers_iqr(plot_X_train_num_iqr, column)
 
 
 
 for column in X_train_num.columns:
-    plot_binary_outliers(plot_X_train_num, column, column + '_outlier', False)
+    plot_binary_outliers(plot_X_train_num_iqr, column, column + '_outlier', False)
     
-#cols to note with this criterion: ['B_avg_TD_pct', 'B_Height_cms', 'B_Reach_cms, 'R_avg_TD_pct', 'R_age', 'B_age']
+#cols to note with this criterion: 
+cols_for_iqr = ['B_avg_TD_pct', 'B_Height_cms', 'B_Reach_cms', 'R_avg_TD_pct', 'R_age', 'B_age']
 #we see that with the iqr method many of the columns have a lot of outliers that we can not exlude,lets try another approach
     
 plot_X_train_num_Chauvenets = X_train_num.copy()
@@ -585,14 +584,34 @@ for column in X_train_num.columns:
 
 
 #we should consider tho that the Chauvenet's works best for data that follows a normal distribution.So if we configure some outliers based on this criterion we will do so if the distribution seems normal.
-normal_dist_col = ['B_avg_SIG_STR_pct', 'B_avg_TD_pct', 'B_Height_cms', 'B_Reach_cms','R_avg_SIG_STR_pct', 'R_avg_TD_pct', 'R_Height_cms', 'R_Reach_cms' ,'lose_streak_dif', 'win_streak_dif', 'longest_win_streak_dif', 'win_dif', 'loss_dif', 'total_round_dif', 'total_title_bout_dif', 'ko_dif', 'sub_dif', 'height_dif', 'reach_dif', 'age_dif', 'sig_str_dif', 'avg_sub_att_dif', 'avg_td_dif', 'Rank_dif']
+normal_dist_col = ['B_avg_SIG_STR_pct', 'B_avg_TD_pct', 'B_Height_cms', 'B_Reach_cms','R_avg_SIG_STR_pct', 'R_avg_TD_pct', 'R_Height_cms', 'R_Reach_cms', 'win_streak_dif', 'longest_win_streak_dif', 'win_dif', 'loss_dif', 'total_round_dif', 'ko_dif', 'sub_dif', 'height_dif', 'reach_dif', 'age_dif', 'sig_str_dif', 'avg_sub_att_dif', 'avg_td_dif', 'Rank_dif']
 
 for column in normal_dist_col:
     plot_binary_outliers(plot_X_train_num_Chauvenets, column, column + '_outlier', False)
     
 
-#cols to note with this criterion: ['B_avg_SIG_STR_pct', 'R_avg_SIG_STR_pct', 'longest_win_streak_dif', 'win_dif', 'loss_dif', 'total_round_dif', 'height_dif']
-#we didint include some cols to note that we think that its not proper to change the values of them (eg total Takedown dif because of styles of fighters etc)
+#cols to note with this criterion: 
+cols_for_chauv = ['B_avg_SIG_STR_pct', 'R_avg_SIG_STR_pct','longest_win_streak_dif', 'win_dif', 'loss_dif', 'total_round_dif', 'height_dif', 'reach_dif', 'Rank_dif']
+#we didnt include some cols to note that we think that its not proper to change the values of them (eg total Takedown dif because of styles of fighters etc)
+#Let's see them one by one
+for column in cols_for_iqr:
+    plot_binary_outliers(plot_X_train_num_iqr, column, column + '_outlier', False)
+
+plot_X_train_num_iqr['B_avg_TD_pct_outlier'].sum()
+#outliers are marked as True
+#B_avg_TD_pct
+plot_X_train_num_iqr[plot_X_train_num_iqr['B_avg_TD_pct_outlier']]['B_avg_TD_pct'].value_counts()
+plot_X_train_num_iqr[plot_X_train_num_iqr['B_avg_TD_pct_outlier']]['B_avg_TD_pct'].min()
+X_train_num[X_train_num['B_avg_TD_pct'] > 0.9]['B_avg_TD_pct'].replace(to_replace=[1, 0.9] ,value=0.89, inplace=True)
+for i in X_train_num[X_train_num['B_avg_TD_pct'] > 0.9]['B_avg_TD_pct'].index:
+    X_train_num['B_avg_TD_pct'][i] = 0.89 
+    print(X_train_num['B_avg_TD_pct'][i])
+
+X_train_num['B_avg_TD_pct'].max()
+
+#B_Height_cms
+plot_X_train_num_iqr[plot_X_train_num_iqr['B_Height_cms_outlier']]['B_Height_cms'].value_counts()
+
 
 
 """
@@ -614,4 +633,19 @@ for column in heavy_tail_num_cols_B:
     
 #we see that the sqrt approach makes the histogram effectively more bell curved for the next cols
 cols_for_sqrt = ['B_avg_SIG_STR_landed', 'B_avg_TD_landed', 'B_longest_win_streak', 'B_total_rounds_fought', 'B_wins'. 'R_avg_SIG_STR_landed', 'R_avg_TD_landed', 'R_longest_win_streak', 'R_total_rounds_fought', 'R_wins']
+"""
+
+
+"""
+from sklearn.preprocessing import StandardScaler
+std_scaler = StandardScaler()
+X_train_num_scaled_values = std_scaler.fit_transform(X_train_num)
+std_scaler.get_feature_names_out()
+X_train_num_scaled = pd.DataFrame(X_train_num_scaled_values, columns=std_scaler.get_feature_names_out(), index=X_train_num.index)
+
+X_test_num_scaled_values = std_scaler.transform(X_test_num)
+X_test_num_scaled = pd.DataFrame(X_test_num_scaled_values, columns=std_scaler.get_feature_names_out(), index=X_test_num.index)
+
+
+X_train_num_scaled
 """
