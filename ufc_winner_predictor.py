@@ -656,7 +656,7 @@ for index in plot_X_train_num_iqr[plot_X_train_num_iqr['B_age_outlier']]['B_age'
     if (X_train_num['B_age'][index] < 19.5):
         X_train_num['B_age'][index] = 20
 
-X_train_num['B_age'].min()
+X_train_num['B_Reach_cms'].min()
 
 #Now for the other criterion
 
@@ -671,17 +671,17 @@ for column in cols_for_chauv:
         if (X_train_num[column][index] < plot_X_train_num_Chauvenets[~plot_X_train_num_Chauvenets[column+'_outlier']][column].min()):
             X_train_num[column][index] = plot_X_train_num_Chauvenets[~plot_X_train_num_Chauvenets[column+'_outlier']][column].min()
        
+X_train_num.columns
 
 
-"""
 for column in X_train_num.columns:
     X_train_num[column].hist(legend=True)
     plt.show()
 
-heavy_tail_num_cols_B = ['B_current_lose_streak', 'B_current_win_streak', 'B_avg_SIG_STR_landed', 'B_avg_SUB_ATT', 'B_avg_TD_landed', 'B_longest_win_streak', 'B_losses','B_total_rounds_fought', 'B_win_by_Decision_Unanimous', 'B_win_by_KO/TKO', 'B_win_by_Submission', 'B_wins']
+heavy_tail_num_cols_B = ['B_current_win_streak', 'B_avg_SIG_STR_landed', 'B_avg_SUB_ATT', 'B_avg_TD_landed', 'B_longest_win_streak', 'B_losses','B_total_rounds_fought', 'B_wins']
 
 for column in heavy_tail_num_cols_B:
-    fig, (ax1, ax2, ax3) = plt.subplots(3, 1)
+    fig, (ax1, ax2, ax3,ax4) = plt.subplots(3, 1)
     ax2.hist(np.sqrt(X_train_num[column]))
     ax1.hist(X_train_num[column])
     ax3.hist(np.log10(X_train_num[column] + 0.00000000000001)) #to avoid log(0) = inf
@@ -691,11 +691,23 @@ for column in heavy_tail_num_cols_B:
     plt.show()
     
 #we see that the sqrt approach makes the histogram effectively more bell curved for the next cols
-cols_for_sqrt = ['B_avg_SIG_STR_landed', 'B_avg_TD_landed', 'B_longest_win_streak', 'B_total_rounds_fought', 'B_wins'. 'R_avg_SIG_STR_landed', 'R_avg_TD_landed', 'R_longest_win_streak', 'R_total_rounds_fought', 'R_wins']
-"""
+cols_for_sqrt = ['B_avg_SIG_STR_landed', 'B_avg_TD_landed', 'B_longest_win_streak', 'B_total_rounds_fought', 'B_wins', 'R_avg_SIG_STR_landed', 'R_avg_TD_landed', 'R_longest_win_streak', 'R_total_rounds_fought', 'R_wins']
+
+for col in cols_for_sqrt:
+    X_train_num['sqrt_'+col] = np.sqrt(X_train_num[col])
+
+X_train_num.drop(cols_for_sqrt, axis=1, inplace=True)
+X_train_num 
+
+for col in cols_for_sqrt:
+    X_test_num['sqrt_'+col] = np.sqrt(X_test_num[col])
+
+X_test_num.drop(cols_for_sqrt, axis=1, inplace=True)
+X_test_num
 
 
-"""
+
+
 from sklearn.preprocessing import StandardScaler
 std_scaler = StandardScaler()
 X_train_num_scaled_values = std_scaler.fit_transform(X_train_num)
@@ -706,5 +718,14 @@ X_test_num_scaled_values = std_scaler.transform(X_test_num)
 X_test_num_scaled = pd.DataFrame(X_test_num_scaled_values, columns=std_scaler.get_feature_names_out(), index=X_test_num.index)
 
 
-X_train_num_scaled
-"""
+for column in X_train_num_scaled.columns:
+    X_train_num_scaled[column].hist(legend=True)
+    plt.show()
+'''
+from sklearn.decomposition import PCA
+pca = PCA(n_components=0.95)
+pca.fit(X_train_num_scaled)
+pca.n_components_
+len(X_train_num_scaled.columns)
+#We see that we can have 95% explained variance ratio with roughly half of the features.
+'''
