@@ -611,7 +611,66 @@ X_train_num['B_avg_TD_pct'].max()
 
 #B_Height_cms
 plot_X_train_num_iqr[plot_X_train_num_iqr['B_Height_cms_outlier']]['B_Height_cms'].value_counts()
+plot_X_train_num_iqr[~plot_X_train_num_iqr['B_Height_cms_outlier']]['B_Height_cms'].max()
+plot_X_train_num_iqr[~plot_X_train_num_iqr['B_Height_cms_outlier']]['B_Height_cms'].min()
+X_train_num['B_Height_cms'].max()
+X_train_num['B_Height_cms'].min()
+for index in plot_X_train_num_iqr[plot_X_train_num_iqr['B_Height_cms_outlier']]['B_Height_cms'].index:
+    if X_train_num['B_Height_cms'][index] == 210.82:
+        X_train_num['B_Height_cms'][index] = 203
+    if X_train_num['B_Height_cms'][index] == 152.40:
+        X_train_num['B_Height_cms'][index] = 155
 
+#B_Reach_cms
+plot_X_train_num_iqr[plot_X_train_num_iqr['B_Reach_cms_outlier']]['B_Reach_cms'].value_counts()
+plot_X_train_num_iqr[~plot_X_train_num_iqr['B_Reach_cms_outlier']]['B_Reach_cms'].min()
+for index in plot_X_train_num_iqr[plot_X_train_num_iqr['B_Reach_cms_outlier']]['B_Reach_cms'].index:
+    if (X_train_num['B_Reach_cms'][index] == 149.86) or (X_train_num['B_Reach_cms'][index] == 147.32):
+        X_train_num['B_Reach_cms'][index] = 152.5
+
+X_train_num['B_Reach_cms'].min()
+
+#R_avg_TD_pct
+plot_X_train_num_iqr[plot_X_train_num_iqr['R_avg_TD_pct_outlier']]['R_avg_TD_pct'].min()
+plot_X_train_num_iqr[~plot_X_train_num_iqr['R_avg_TD_pct_outlier']]['R_avg_TD_pct'].max()
+for index in plot_X_train_num_iqr[plot_X_train_num_iqr['R_avg_TD_pct_outlier']]['R_avg_TD_pct'].index:
+    if (X_train_num['R_avg_TD_pct'][index] > 0.833333333):
+        X_train_num['R_avg_TD_pct'][index] = 0.83
+
+X_train_num['R_avg_TD_pct'].max()
+
+#R_age
+plot_X_train_num_iqr[plot_X_train_num_iqr['R_age_outlier']]['R_age'].min()
+plot_X_train_num_iqr[~plot_X_train_num_iqr['R_age_outlier']]['R_age'].max()
+for index in plot_X_train_num_iqr[plot_X_train_num_iqr['R_age_outlier']]['R_age'].index:
+    if (X_train_num['R_age'][index] > 43):
+        X_train_num['R_age'][index] = 42
+
+X_train_num['R_age'].max()
+
+#B_age
+plot_X_train_num_iqr[plot_X_train_num_iqr['B_age_outlier']]['B_age'].value_counts()
+for index in plot_X_train_num_iqr[plot_X_train_num_iqr['B_age_outlier']]['B_age'].index:
+    if (X_train_num['B_age'][index] > 39.5):
+        X_train_num['B_age'][index] = 39
+    if (X_train_num['B_age'][index] < 19.5):
+        X_train_num['B_age'][index] = 20
+
+X_train_num['B_age'].min()
+
+#Now for the other criterion
+
+for column in cols_for_chauv:
+    plot_binary_outliers(plot_X_train_num_Chauvenets, column, column + '_outlier', False)
+
+#i will automate this 
+for column in cols_for_chauv:
+    for index in plot_X_train_num_Chauvenets[plot_X_train_num_Chauvenets[column+'_outlier']][column].index:
+        if (X_train_num[column][index] > plot_X_train_num_Chauvenets[~plot_X_train_num_Chauvenets[column+'_outlier']][column].max()):
+           X_train_num[column][index] = plot_X_train_num_Chauvenets[~plot_X_train_num_iqr[column+'_outlier']][column].max()
+        if (X_train_num[column][index] < plot_X_train_num_Chauvenets[~plot_X_train_num_Chauvenets[column+'_outlier']][column].min()):
+            X_train_num[column][index] = plot_X_train_num_Chauvenets[~plot_X_train_num_Chauvenets[column+'_outlier']][column].min()
+       
 
 
 """
