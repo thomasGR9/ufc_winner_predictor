@@ -681,7 +681,7 @@ for column in X_train_num.columns:
 heavy_tail_num_cols_B = ['B_current_win_streak', 'B_avg_SIG_STR_landed', 'B_avg_SUB_ATT', 'B_avg_TD_landed', 'B_longest_win_streak', 'B_losses','B_total_rounds_fought', 'B_wins']
 
 for column in heavy_tail_num_cols_B:
-    fig, (ax1, ax2, ax3,ax4) = plt.subplots(3, 1)
+    fig, (ax1, ax2, ax3) = plt.subplots(3, 1)
     ax2.hist(np.sqrt(X_train_num[column]))
     ax1.hist(X_train_num[column])
     ax3.hist(np.log10(X_train_num[column] + 0.00000000000001)) #to avoid log(0) = inf
@@ -703,9 +703,29 @@ for col in cols_for_sqrt:
     X_test_num['sqrt_'+col] = np.sqrt(X_test_num[col])
 
 X_test_num.drop(cols_for_sqrt, axis=1, inplace=True)
-X_test_num
+X_train_num.columns
 
+remaining_cols_with_tail = ['B_current_win_streak', 'B_avg_SUB_ATT', 'B_losses', 'R_current_win_streak', 'R_avg_SUB_ATT', 'R_losses']
+for column in remaining_cols_with_tail:
+    fig, (ax1, ax2, ax3) = plt.subplots(3, 1)
+    ax1.hist(X_train_num[column])
+    ax2.hist(np.cbrt(X_train_num[column]))
+    ax3.hist(np.arcsin(np.sqrt(X_train_num[column])))
+    ax1.set_title(column)
+    ax2.set_title('cube_root_'+column)
+    ax3.set_title('arcsinsqrt_'+column)
+    plt.show()
 
+#we will use the cube root of the remaining cols
+for col in remaining_cols_with_tail:
+    X_train_num['cbrt_'+col] = np.sqrt(X_train_num[col])
+
+X_train_num.drop(remaining_cols_with_tail, axis=1, inplace=True)
+
+for col in remaining_cols_with_tail:
+    X_test_num['cbrt_'+col] = np.sqrt(X_test_num[col])
+
+X_test_num.drop(remaining_cols_with_tail, axis=1, inplace=True)
 
 
 from sklearn.preprocessing import StandardScaler
@@ -721,11 +741,67 @@ X_test_num_scaled = pd.DataFrame(X_test_num_scaled_values, columns=std_scaler.ge
 for column in X_train_num_scaled.columns:
     X_train_num_scaled[column].hist(legend=True)
     plt.show()
-'''
+
+
 from sklearn.decomposition import PCA
 pca = PCA(n_components=0.95)
-pca.fit(X_train_num_scaled)
+X_train_num_scaled_pca_values = pca.fit_transform(X_train_num_scaled)
 pca.n_components_
 len(X_train_num_scaled.columns)
 #We see that we can have 95% explained variance ratio with roughly half of the features.
+
+X_train_num_scaled_pca = pd.DataFrame(X_train_num_scaled_pca_values, columns=pca.get_feature_names_out(), index=X_train_num.index)
+
+X_test_num_scaled_pca_values = pca.transform(X_test_num_scaled)
+X_test_num_scaled_pca = pd.DataFrame(X_test_num_scaled_pca_values, columns=pca.get_feature_names_out(), index=X_test_num.index)
+
+for column in X_train_num_scaled_pca.columns:
+    X_train_num_scaled_pca[column].hist(legend=True)
+    plt.show()
+
+#we see that the pca features are much bell shaped like
+
 '''
+X_train_final = X_train_num_scaled_pca[:3500]
+X_valid_final = X_train_num_scaled_pca[3500:]
+X_test_final = X_test_num_scaled_pca.copy()
+
+y_train_final = y_train[:3500]
+y_valid_final = y_train[3500:]
+y_test_final = y_test.copy()
+
+import tensorflow as tf
+
+n_units = 300
+activation = tf.keras.activations.swish
+initializer = tf.keras.initializers.he_normal()
+model = tf.keras.Sequential([
+    tf.keras.layers.Input(shape=X_train.shape[1:]),
+    tf.keras.layers.BatchNormalization(),
+    tf.keras.layers.Dense(n_units, activation= activation, kernel_initializer=initializer),
+    tf.keras.layers.BatchNormalization(),
+    tf.keras.layers.Dense(n_units, activation= activation, kernel_initializer=initializer),
+    tf.keras.layers.BatchNormalization(),
+    tf.keras.layers.Dense(n_units, activation= activation, kernel_initializer=initializer),
+    tf.keras.layers.BatchNormalization(),
+    tf.keras.layers.Dense(n_units, activation= activation, kernel_initializer=initializer),
+    tf.keras.layers.BatchNormalization(),
+    tf.keras.layers.Dense(n_units, activation= activation, kernel_initializer=initializer),
+    tf.keras.layers.Dropout(rate=0.3),
+    tf.keras.layers.BatchNormalization(),
+    tf.keras.layers.Dense(n_units, activation= activation, kernel_initializer=initializer),
+    tf.keras.layers.Dropout(rate=0.3),
+    tf.keras.layers.BatchNormalization(),
+    tf.keras.layers.Dense(n_units, activation= activation, kernel_initializer=initializer),
+    tf.keras.layers.Dropout(rate=0.3),
+    tf.keras.layers.BatchNormalization(),
+    tf.keras.layers.Dense(1, activation='Sigmoid')
+])
+
+optimizer = tf.keras.optimizers.Nadam()
+
+lr_schedule = tf.keras.callbacks.ReduceLROnPlateau(monitor='val_loss',factor=0.2, patience=10,)
+
+callback = tf.keras.callbacks.EarlyStopping(monitor='val_loss' ,patience=5, restore_best_weights=True, min_delta=0.001)
+
+model.compile(loss='binary_crossentropy', optimizer=optimizer, metrics=['accuracy'])
