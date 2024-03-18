@@ -761,10 +761,15 @@ for column in X_train_num_scaled_pca.columns:
 
 #we see that the pca features are much bell shaped like
 
-'''
-X_train_final = X_train_num_scaled_pca[:3500]
-X_valid_final = X_train_num_scaled_pca[3500:]
-X_test_final = X_test_num_scaled_pca.copy()
+#in this branch we will combine the cat and num training values, then we will build a neural network to make the classification
+
+X_train_concat = pd.concat([X_train_num_scaled_pca, X_train_cat_en], axis=1)
+X_test_concat = pd.concat([X_test_num_scaled_pca, X_test_cat_en], axis=1)
+
+
+X_train_final = X_train_concat[:3500]
+X_valid_final = X_train_concat[3500:]
+X_test_final = X_test_concat.copy()
 
 y_train_final = y_train[:3500]
 y_valid_final = y_train[3500:]
@@ -773,12 +778,10 @@ y_test_final = y_test.copy()
 import tensorflow as tf
 
 n_units = 300
-activation = tf.keras.activations.swish
+activation = tf.keras.activations.gelu
 initializer = tf.keras.initializers.he_normal()
 model = tf.keras.Sequential([
-    tf.keras.layers.Input(shape=X_train.shape[1:]),
-    tf.keras.layers.BatchNormalization(),
-    tf.keras.layers.Dense(n_units, activation= activation, kernel_initializer=initializer),
+    tf.keras.layers.Input(shape=X_train_final.shape[1:]),
     tf.keras.layers.BatchNormalization(),
     tf.keras.layers.Dense(n_units, activation= activation, kernel_initializer=initializer),
     tf.keras.layers.BatchNormalization(),
@@ -795,13 +798,44 @@ model = tf.keras.Sequential([
     tf.keras.layers.Dense(n_units, activation= activation, kernel_initializer=initializer),
     tf.keras.layers.Dropout(rate=0.3),
     tf.keras.layers.BatchNormalization(),
-    tf.keras.layers.Dense(1, activation='Sigmoid')
+    tf.keras.layers.Dense(n_units, activation= activation, kernel_initializer=initializer),
+    tf.keras.layers.Dropout(rate=0.3),
+    tf.keras.layers.BatchNormalization(),
+    tf.keras.layers.Dense(n_units, activation= activation, kernel_initializer=initializer),
+    tf.keras.layers.Dropout(rate=0.3),
+    tf.keras.layers.BatchNormalization(),
+    tf.keras.layers.Dense(n_units, activation= activation, kernel_initializer=initializer),
+    tf.keras.layers.Dropout(rate=0.3),
+    tf.keras.layers.BatchNormalization(),
+    tf.keras.layers.Dense(1, activation='sigmoid')
 ])
 
-optimizer = tf.keras.optimizers.Nadam()
+optimizer = tf.keras.optimizers.Nadam(learning_rate=0.05)
 
-lr_schedule = tf.keras.callbacks.ReduceLROnPlateau(monitor='val_loss',factor=0.2, patience=10,)
+lr_schedule = tf.keras.callbacks.ReduceLROnPlateau(monitor='val_accuracy',factor=0.2, patience=3)
 
-callback = tf.keras.callbacks.EarlyStopping(monitor='val_loss' ,patience=5, restore_best_weights=True, min_delta=0.001)
+callback = tf.keras.callbacks.EarlyStopping(monitor='val_accuracy' ,patience=10, restore_best_weights=True)
 
 model.compile(loss='binary_crossentropy', optimizer=optimizer, metrics=['accuracy'])
+#we should put a higher weight in the underpressented class (1 in this case)
+weight_minoniry_class = (y_train_final == 0).sum() / (y_train_final == 1).sum()
+
+history = model.fit(X_train_final, y_train_final, epochs=100, validation_data=(X_valid_final, y_valid_final), batch_size=32, callbacks=[lr_schedule, callback], class_weight= {0:1, 1:weight_minoniry_class})
+
+model.evaluate(x=X_test_final, y=y_test_final)
+#59%
+pd.DataFrame(history.history)[["accuracy", "val_accuracy"]].plot(figsize=(8, 5))
+
+#monte_carlo
+y_probas = np.stack([model(X_test_final, training=True) for sample in range(100)])
+y_proba = y_probas.mean(axis=0)
+y_proba
+monte_carlo_pred = []
+for i in y_proba:
+    if i > 0.5:
+        monte_carlo_pred.append(1)
+    if i < 0.5:
+        monte_carlo_pred.append(0)
+    
+(monte_carlo_pred == y_test_final).sum() / len(y_test_final)
+
