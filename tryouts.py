@@ -82,7 +82,7 @@ model.evaluate(x=X_test_pca, y=y_test_final)
 
 pd.DataFrame(history.history)[["accuracy", "val_accuracy"]].plot(figsize=(8, 5))
 
-#monte_carlo
+#monte carlo
 y_probas = np.stack([model(X_test_final, training=True) for sample in range(100)])
 y_proba = y_probas.mean(axis=0)
 y_proba
