@@ -15,6 +15,7 @@ X_valid_pca_cat = X_train_full[3500:].select_dtypes(np.float64)
 X_test_pca_cat = X_test_full.copy()
 
 #X with pca without cat
+X_train_pca_full = X_train_full.drop(['B_Stance_Orthodox', 'B_Stance_Southpaw', 'B_Stance_Switch', 'R_Stance_Orthodox', 'R_Stance_Southpaw', 'R_Stance_Switch'], axis=1)
 X_train_pca = X_train_pca_cat[:3500].drop(['B_Stance_Orthodox', 'B_Stance_Southpaw', 'B_Stance_Switch', 'R_Stance_Orthodox', 'R_Stance_Southpaw', 'R_Stance_Switch'], axis=1)
 X_valid_pca = X_valid_pca_cat.drop(['B_Stance_Orthodox', 'B_Stance_Southpaw', 'B_Stance_Switch', 'R_Stance_Orthodox', 'R_Stance_Southpaw', 'R_Stance_Switch'], axis=1)
 X_test_pca = X_test_pca_cat.drop(['B_Stance_Orthodox', 'B_Stance_Southpaw', 'B_Stance_Switch', 'R_Stance_Orthodox', 'R_Stance_Southpaw', 'R_Stance_Switch'], axis=1)
@@ -28,6 +29,7 @@ X_test_without_pca = X_test_without_pca_full.copy().select_dtypes(np.float64)
 y_train_final = y_train[:3500].select_dtypes(np.float64)['Winner']
 y_valid_final = y_train[3500:].select_dtypes(np.float64)['Winner']
 y_test_final = y_test.copy()['Winner']
+y_train_full = y_train.copy()
 
 import tensorflow as tf
 
@@ -100,6 +102,60 @@ from keras.models import load_model
 model.save("62acc.h5") 62%acc, X with pca and cat
 '''
 
-top_mod = tf.keras.models.load_model('./62acc.h5')
-top_mod.summary()
-top_mod.evaluate(x=X_test_pca_cat, y=y_test_final)
+top_mod_NN = tf.keras.models.load_model('./62acc.h5')
+top_mod_NN.summary()
+top_mod_NN.evaluate(x=X_test_pca_cat, y=y_test_final)
+
+from sklearn.ensemble import RandomForestClassifier
+possible_n_est = [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000]
+possible_max_depth = [1, 2, 3, 4, 5, 6, 7]
+class_weight = (y_train_full == 0).sum() / (y_train_full == 1).sum()
+for n_est in possible_n_est:
+    for max_depth in possible_max_depth:
+        rnf_clf = RandomForestClassifier(n_estimators=n_est, max_depth=max_depth, random_state=42, class_weight={0:1 , 1:class_weight})
+        rnf_clf.fit(X_train_pca_full, y_train_full)
+        train_acc = (rnf_clf.predict(X_train_pca) == y_train_final).sum() / X_train_pca.shape[0]
+        test_acc = (rnf_clf.predict(X_test_pca) == y_test_final).sum() / X_test_pca.shape[0]
+        print(f"For n_est:{n_est} and max_depth:{max_depth} we have train_acc:{train_acc} and test_acc{test_acc}")
+#the best test accuracy is 59.59% for n_est:400 and max_depth:6
+
+top_mod_RFC = RandomForestClassifier(n_estimators=400, max_depth=6, random_state=42, class_weight={0:1 , 1:class_weight})
+top_mod_RFC.fit(X_train_pca_full, y_train_full)
+(top_mod_RFC.predict(X_test_pca) == y_test_final).sum() / y_test_final.shape[0]
+
+from sklearn.ensemble import GradientBoostingClassifier
+gbcl = GradientBoostingClassifier(max_depth=6, learning_rate=0.05, n_estimators=500, n_iter_no_change=10,random_state=42)
+gbcl.fit(X_train_pca_full, y_train_full)
+gbcl.n_estimators_
+(gbcl.predict(X_train_pca) == y_train_final).sum() / X_train_pca.shape[0]
+(gbcl.predict(X_test_pca) == y_test_final).sum() / y_test_final.shape[0]
+#61
+
+#we should consider that is possible that the models performance is overestimated because of the inbalance of the two classes populations  
+(y_test_final == 0).sum() / len(y_test_final)
+(y_test_final == 1).sum()
+y_test_fair = y_test_final.copy()
+X_test_fair_pca = X_test_pca.copy()
+X_test_fair_pca_cat = X_test_pca_cat.copy()
+i = 0
+         
+for index in y_test_fair.index:
+    if (y_test_fair[index] == 0.0):
+        i = i + 1
+        if (i < 202):
+            y_test_fair.drop(index, inplace=True)
+            X_test_fair_pca.drop(index, inplace=True)
+            X_test_fair_pca_cat.drop(index, inplace=True)
+
+(y_test_fair == 0).sum() / (y_test_fair == 1).sum()
+#the _fair X and y test set have the same number of instances classified as 0 and 1
+(gbcl.predict(X_test_fair_pca) == y_test_fair).sum() / y_test_fair.shape[0]
+#55%
+(top_mod_RFC.predict(X_test_fair_pca) == y_test_fair).sum() / y_test_fair.shape[0]
+#59%
+top_mod_NN.evaluate(x=X_test_fair_pca_cat, y=y_test_fair)
+#58%
+
+#We see that the performance of the gbcl predictor (that doesnt have a class_weight parameter) drop significantly
+
+
