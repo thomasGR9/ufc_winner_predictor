@@ -158,4 +158,63 @@ top_mod_NN.evaluate(x=X_test_fair_pca_cat, y=y_test_fair)
 
 #We see that the performance of the gbcl predictor (that doesnt have a class_weight parameter) drop significantly
 
+#Its time to choose the right balance between precision and recall.I believe that the metric that i should give the most of the weight is precision.
+#I look at it as a gambler's view.Its way more important that you are more certain about the correct winner than finding the most correct winners, if you are gonna bet for the winner.
+from sklearn.metrics import precision_score, recall_score
+from sklearn.metrics import confusion_matrix
+from sklearn.metrics import precision_recall_curve
+import matplotlib.pyplot as plt
 
+(top_mod_RFC.predict(X_test_fair_pca) == 1).sum() 
+#manually calculating precision score to be sure
+top_mod_RFC.predict(X_test_fair_pca) == 1
+j = 0
+for i in range(X_test_fair_pca.shape[0]):
+    if (top_mod_RFC.predict(X_test_fair_pca) == 1)[i]:
+        if (y_test_fair == 1).tolist()[i]:
+            j = j + 1
+
+print(j / (top_mod_RFC.predict(X_test_fair_pca) == 1).sum())
+
+
+RFC_winner_one_pred = (top_mod_RFC.predict(X_test_fair_pca) == 1)
+y_test_winner_one = (y_test_fair == 1)
+
+confusion_matrix(y_test_winner_one, RFC_winner_one_pred)
+precision_score(y_test_winner_one, RFC_winner_one_pred)
+recall_score(y_test_winner_one, RFC_winner_one_pred)
+from sklearn.model_selection import cross_val_predict
+#Winner 0 means red corner winner 1 means blue corner winner
+
+y_probas = cross_val_predict(top_mod_RFC, X_test_fair_pca, y_test_fair, cv=3, method="predict_proba")
+y_scores = y_probas[:, 1]
+precisions, recalls, thresholds = precision_recall_curve(y_test_fair, y_scores)
+plt.plot(thresholds, precisions[:-1], label='Precision')
+plt.plot(thresholds, recalls[:-1], label='Recall')
+plt.show()
+
+precisions[:-1].max()
+idx_for_80_prec = (precisions > 0.80).argmax()
+est_prob_thresh_win_one = thresholds[idx_for_80_prec]
+y_pred_80_prec = (y_scores >= est_prob_thresh_win_one)
+precision_score(y_test_fair, y_pred_80_prec)
+#81%
+recall_score(y_test_fair, y_pred_80_prec)
+#7%
+
+#We see that if we trust this classifier where he outputs an estimated probability over 67% for the blue to win, we will have about 80% precision 
+#So for the test set if this classifier predicts that red is gonna win,there is about 80%chance it is correct but it will be able to predict about the 7% of all the winners
+#But because a very low estimated probability means a high precision that red is gonna win,where we can also bet on.
+
+precisions_2, recalls_2, thresholds_2 = precision_recall_curve(y_test_fair, y_probas[:, 0])
+idx_for_80_prec_2 = (precisions_2 > 0.70).argmax()
+est_prob_thresh_loss_one = thresholds_2[idx_for_80_prec_2]
+y_pred_80_prec_2 = (y_probas[:, 0] >= est_prob_thresh_loss_one)
+precision_score(y_test_fair, y_pred_80_prec_2)
+#80%
+recall_score(y_test_fair, y_pred_80_prec_2)
+#1%
+
+#we see that in order to have over 80% precision on the classifier for the blue to lose we need below 1-est_prob_thresh_loss_one = 0.36 on our y_scores list (the classifier estimated probabilities)
+
+#all in all if  y_score>0.67 or y_score<0.36 we can trust it with about 80% precision for the blue corner to win or lose 
