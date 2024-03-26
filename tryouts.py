@@ -117,7 +117,7 @@ for n_est in possible_n_est:
         train_acc = (rnf_clf.predict(X_train_pca) == y_train_final).sum() / X_train_pca.shape[0]
         test_acc = (rnf_clf.predict(X_test_pca) == y_test_final).sum() / X_test_pca.shape[0]
         print(f"For n_est:{n_est} and max_depth:{max_depth} we have train_acc:{train_acc} and test_acc{test_acc}")
-#the best test accuracy is 59.59% for n_est:400 and max_depth:6
+#the best test accuracy is  59.59% for n_est:400 and max_depth:6
 from sklearn.model_selection import StratifiedKFold 
 from sklearn.metrics import precision_score
 
