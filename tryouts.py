@@ -118,10 +118,70 @@ for n_est in possible_n_est:
         test_acc = (rnf_clf.predict(X_test_pca) == y_test_final).sum() / X_test_pca.shape[0]
         print(f"For n_est:{n_est} and max_depth:{max_depth} we have train_acc:{train_acc} and test_acc{test_acc}")
 #the best test accuracy is 59.59% for n_est:400 and max_depth:6
+from sklearn.model_selection import StratifiedKFold 
+from sklearn.metrics import precision_score
+
+
+def optimize(params, param_names, x, y):
+    params= dict(zip(param_names, params))
+    model = RandomForestClassifier(**params)
+    kf = StratifiedKFold(n_splits=5)
+    presicions = []
+    for idx in kf.split(X=x, y=y):
+        train_idx, test_idx = idx[0], idx[1]
+        xtrain = x.loc[train_idx]
+        ytrain = y.loc[train_idx]
+        
+        xtest = x.loc[test_idx]
+        ytest = y.loc[test_idx]
+        
+        model.fit(xtrain, ytrain)
+        preds = model.predict(xtest)
+        fold_pres = precision_score(ytest, preds)
+        presicions.append(fold_pres)
+    
+    return -1.0 * np.mean(presicions)
+
+from skopt import space
+
+param_space = [
+    space.Integer(3, 15, name="max_depth"),
+    space.Integer(200, 700, name="n_estimators"),
+    space.Categorical(["gini", "entropy"], name="criterion"),
+    space.Real(0.01, 1, prior="uniform" ,name="max_features")
+]
+param_names = [
+    "max_depth",
+    "n_estimators",
+    "criterion",
+    "max_features"
+]
+
+from functools import partial
+optimization_function = partial(
+    optimize,
+    param_names = param_names,
+    x = X_train_pca_full,
+    y = y_train_full
+)
+from skopt import gp_minimize
+result =  gp_minimize(
+    optimization_function,
+    dimensions = param_space,
+    verbose=10 
+)
+
+print(
+    dict(zip(param_names, result.x))
+)
+
 
 top_mod_RFC = RandomForestClassifier(n_estimators=400, max_depth=6, random_state=42, class_weight={0:1 , 1:class_weight})
 top_mod_RFC.fit(X_train_pca_full, y_train_full)
 (top_mod_RFC.predict(X_test_pca) == y_test_final).sum() / y_test_final.shape[0]
+
+
+
 
 from sklearn.ensemble import GradientBoostingClassifier
 gbcl = GradientBoostingClassifier(max_depth=6, learning_rate=0.05, n_estimators=500, n_iter_no_change=10,random_state=42)
@@ -157,7 +217,7 @@ top_mod_NN.evaluate(x=X_test_fair_pca_cat, y=y_test_fair)
 #58%
 
 #We see that the performance of the gbcl predictor (that doesnt have a class_weight parameter) drop significantly
-
+'''
 #Its time to choose the right balance between precision and recall.I believe that the metric that i should give the most of the weight is precision.
 #I look at it as a gambler's view.Its way more important that you are more certain about the correct winner than finding the most correct winners, if you are gonna bet for the winner.
 from sklearn.metrics import precision_score, recall_score
@@ -218,3 +278,4 @@ recall_score(y_test_fair, y_pred_80_prec_2)
 #we see that in order to have over 80% precision on the classifier for the blue to lose we need below 1-est_prob_thresh_loss_one = 0.36 on our y_scores list (the classifier estimated probabilities)
 
 #all in all if  y_score>0.67 or y_score<0.36 we can trust it with about 80% precision for the blue corner to win or lose 
+'''
