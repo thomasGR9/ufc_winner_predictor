@@ -117,12 +117,12 @@ for n_est in possible_n_est:
         train_acc = (rnf_clf.predict(X_train_pca) == y_train_final).sum() / X_train_pca.shape[0]
         test_acc = (rnf_clf.predict(X_test_pca) == y_test_final).sum() / X_test_pca.shape[0]
         print(f"For n_est:{n_est} and max_depth:{max_depth} we have train_acc:{train_acc} and test_acc{test_acc}")
-#the best test accuracy is  59.59% for n_est:400 and max_depth:6
+#the best test accuracy is  59.59% for n_est:400 and max_depth:6, so we are gonna narrow our bayesian hyperparameter search around that number
 from sklearn.model_selection import StratifiedKFold 
 from sklearn.metrics import precision_score
 
 
-def optimize(params, param_names, x, y):
+def optimize_RFC(params, param_names, x, y):
     params= dict(zip(param_names, params))
     model = RandomForestClassifier(**params)
     kf = StratifiedKFold(n_splits=5)
@@ -144,13 +144,13 @@ def optimize(params, param_names, x, y):
 
 from skopt import space
 
-param_space = [
+param_space_RFC = [
     space.Integer(3, 15, name="max_depth"),
     space.Integer(200, 700, name="n_estimators"),
     space.Categorical(["gini", "entropy"], name="criterion"),
     space.Real(0.01, 1, prior="uniform" ,name="max_features")
 ]
-param_names = [
+param_names_RFC = [
     "max_depth",
     "n_estimators",
     "criterion",
@@ -158,21 +158,21 @@ param_names = [
 ]
 
 from functools import partial
-optimization_function = partial(
-    optimize,
-    param_names = param_names,
+optimization_function_RFC = partial(
+    optimize_RFC,
+    param_names = param_names_RFC,
     x = X_train_pca_full,
     y = y_train_full
 )
 from skopt import gp_minimize
-result =  gp_minimize(
-    optimization_function,
-    dimensions = param_space,
+result_RFC =  gp_minimize(
+    optimization_function_RFC,
+    dimensions = param_space_RFC,
     verbose=10 
 )
 
 print(
-    dict(zip(param_names, result.x))
+    dict(zip(param_names_RFC, result_RFC.x))
 )
 
 
@@ -183,13 +183,162 @@ top_mod_RFC.fit(X_train_pca_full, y_train_full)
 
 
 
+
 from sklearn.ensemble import GradientBoostingClassifier
 gbcl = GradientBoostingClassifier(max_depth=6, learning_rate=0.05, n_estimators=500, n_iter_no_change=10,random_state=42)
-gbcl.fit(X_train_pca_full, y_train_full)
-gbcl.n_estimators_
-(gbcl.predict(X_train_pca) == y_train_final).sum() / X_train_pca.shape[0]
-(gbcl.predict(X_test_pca) == y_test_final).sum() / y_test_final.shape[0]
-#61
+
+def optimize_GBC(params, param_names, x, y):
+    params= dict(zip(param_names, params))
+    model = GradientBoostingClassifier(**params, n_estimators=500, n_iter_no_change=10)
+    kf = StratifiedKFold(n_splits=5)
+    presicions = []
+    for idx in kf.split(X=x, y=y):
+        train_idx, test_idx = idx[0], idx[1]
+        xtrain = x.loc[train_idx]
+        ytrain = y.loc[train_idx]
+        
+        xtest = x.loc[test_idx]
+        ytest = y.loc[test_idx]
+        
+        model.fit(xtrain, ytrain)
+        preds = model.predict(xtest)
+        fold_pres = precision_score(ytest, preds)
+        presicions.append(fold_pres)
+    return -1.0 * np.mean(presicions)
+
+param_space_GBC = [
+    space.Integer(2, 10, name="max_depth"),
+    space.Real(0.8, 1, prior="uniform" ,name="subsample"),
+    space.Real(0.01, 1, prior="uniform" ,name="learning_rate")
+]
+param_names_GBC = [
+    "max_depth",
+    "subsample",
+    "learning_rate"
+]
+
+optimization_function_GBC = partial(
+    optimize_GBC,
+    param_names = param_names_GBC,
+    x = X_train_pca_full,
+    y = y_train_full
+)
+
+result_GBC =  gp_minimize(
+    optimization_function_GBC,
+    dimensions = param_space_GBC,
+    verbose=10 
+)
+
+print(
+    dict(zip(param_names_GBC, result_GBC.x))
+)
+
+from sklearn.svm import SVC
+def optimize_SVC(params, param_names, x, y):
+    params= dict(zip(param_names, params))
+    model = SVC(**params, kernel='rbf')
+    kf = StratifiedKFold(n_splits=5)
+    presicions = []
+    for idx in kf.split(X=x, y=y):
+        train_idx, test_idx = idx[0], idx[1]
+        xtrain = x.loc[train_idx]
+        ytrain = y.loc[train_idx]
+        
+        xtest = x.loc[test_idx]
+        ytest = y.loc[test_idx]
+        
+        model.fit(xtrain, ytrain)
+        preds = model.predict(xtest)
+        fold_pres = precision_score(ytest, preds)
+        presicions.append(fold_pres)
+    return -1.0 * np.mean(presicions)
+
+param_space_SVC = [
+    space.Real(0.001, 1000, prior="uniform" ,name="C"),
+    space.Real(0.1, 5, prior="uniform" ,name="gamma")
+]
+param_names_SVC = [
+    "C",
+    "gamma",
+]
+
+optimization_function_SVC = partial(
+    optimize_SVC,
+    param_names = param_names_SVC,
+    x = X_train_pca_full,
+    y = y_train_full
+)
+
+result_SVC =  gp_minimize(
+    optimization_function_SVC,
+    dimensions = param_space_SVC,
+    verbose=10 
+)
+
+print(
+    dict(zip(param_names_SVC, result_SVC.x))
+)
+
+
+from sklearn.ensemble import AdaBoostClassifier
+from sklearn.tree import DecisionTreeClassifier
+def optimize_ABC(params, param_names, x, y):
+    params= dict(zip(param_names, params))
+    model = AdaBoostClassifier(DecisionTreeClassifier(max_depth=2), **params)
+    kf = StratifiedKFold(n_splits=5)
+    presicions = []
+    for idx in kf.split(X=x, y=y):
+        train_idx, test_idx = idx[0], idx[1]
+        xtrain = x.loc[train_idx]
+        ytrain = y.loc[train_idx]
+        
+        xtest = x.loc[test_idx]
+        ytest = y.loc[test_idx]
+        
+        model.fit(xtrain, ytrain)
+        preds = model.predict(xtest)
+        fold_pres = precision_score(ytest, preds)
+        presicions.append(fold_pres)
+    return -1.0 * np.mean(presicions)
+
+param_space_ABC = [
+    space.Integer(20, 40, name="n_estimators"),
+    space.Real(0.01, 0.8, prior="uniform" ,name="learning_rate")
+]
+param_names_ABC = [
+    "n_estimators",
+    "learning_rate",
+]
+
+optimization_function_ABC = partial(
+    optimize_ABC,
+    param_names = param_names_ABC,
+    x = X_train_pca_full,
+    y = y_train_full
+)
+
+result_ABC =  gp_minimize(
+    optimization_function_ABC,
+    dimensions = param_space_ABC,
+    verbose=10 
+)
+
+print(
+    dict(zip(param_names_ABC, result_ABC.x))
+)
+
+
+from sklearn.ensemble import VotingClassifier
+estimators = [
+    ('NN', top_mod_NN),
+    ('RFC', top_mod_RFC),
+    ('GBC', top_mod_GBC),
+    ('SVC', top_mod_SVC),
+    ('ABC', top_mod_ABC)
+]
+
+voting_clf = VotingClassifier(estimators=estimators, voting='soft')
 
 #we should consider that is possible that the models performance is overestimated because of the inbalance of the two classes populations  
 (y_test_final == 0).sum() / len(y_test_final)
