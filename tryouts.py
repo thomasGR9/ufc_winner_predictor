@@ -5,6 +5,7 @@ from keras.models import load_model
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import StratifiedKFold 
 from sklearn.metrics import precision_score
+from sklearn.metrics import f1_score
 from skopt import space
 from functools import partial
 from skopt import gp_minimize
@@ -18,6 +19,7 @@ from sklearn.metrics import confusion_matrix
 from sklearn.metrics import precision_recall_curve
 import matplotlib.pyplot as plt
 from sklearn.model_selection import cross_val_predict
+from sklearn.ensemble import BaggingClassifier
 
 X_train_full = pd.read_csv('./X_train_concat.csv', dtype=np.float64)
 X_test_full = pd.read_csv('./X_test_concat.csv', dtype=np.float64)
@@ -279,7 +281,7 @@ top_mod_GBC = GradientBoostingClassifier(n_estimators=500, n_iter_no_change=10, 
 
 def optimize_SVC(params, param_names, x, y):
     params= dict(zip(param_names, params))
-    model = SVC(**params, kernel='rbf')
+    model = BaggingClassifier(SVC(kernel='rbf', **params), n_estimators=100, max_features=0.3)
     kf = StratifiedKFold(n_splits=5)
     presicions = []
     for idx in kf.split(X=x, y=y):
@@ -297,8 +299,8 @@ def optimize_SVC(params, param_names, x, y):
     return -1.0 * np.mean(presicions)
 
 param_space_SVC = [
-    space.Real(0.001, 1000, prior="uniform" ,name="C"),
-    space.Real(0.1, 5, prior="uniform" ,name="gamma")
+    space.Real(0.01, 300, prior="uniform" ,name="C"),
+    space.Real(0.1, 2, prior="uniform" ,name="gamma")
 ]
 param_names_SVC = [
     "C",
@@ -315,15 +317,16 @@ optimization_function_SVC = partial(
 result_SVC =  gp_minimize(
     optimization_function_SVC,
     dimensions = param_space_SVC,
-    verbose=10 
+    verbose=10,
+    n_calls=30
 )
 
 print(
     dict(zip(param_names_SVC, result_SVC.x))
 )
 #{'C': 1000.0, 'gamma': 0.38279667625542757}
+top_mod_SVC = BaggingClassifier(SVC(kernel='rbf', probability=True, class_weight={0:1 , 1:weight_minoniry_class}, C=256.6619199677021, gamma=0.11674269193229327), n_estimators=500, max_samples=100)
 
-top_mod_SVC = SVC(C=1000.0, gamma=0.38279667625542757, kernel='rbf', probability=True, class_weight={0:1 , 1:weight_minoniry_class})
 
 def optimize_ABC(params, param_names, x, y):
     params= dict(zip(param_names, params))
@@ -375,16 +378,24 @@ top_mod_ABC = AdaBoostClassifier(DecisionTreeClassifier(max_depth=2), n_estimato
 estimators = [
     ('RFC', top_mod_RFC),
     ('GBC', top_mod_GBC),
-    ('SVC', top_mod_SVC),
-    ('ABC', top_mod_ABC)
+    ('ABC', top_mod_ABC),
 ]
 
 voting_clf = VotingClassifier(estimators=estimators, voting='soft')
 voting_clf.fit(X_train_pca, y_train_final)
-predictions = voting_clf.predict(X_test_pca)
-(predictions == y_test_final).sum() / len(y_test_final)
-pres_test = precision_score(y_test_final, predictions)
-recall_test = recall_score(y_test_final, predictions)
+voting_clf.estimators_
+predictions_vot_clf = voting_clf.predict(X_test_pca)
+for name, clf in voting_clf.named_estimators_.items():
+    print(name, "= prec", precision_score(y_test_final, clf.predict(X_test_pca)), ", recall", recall_score(y_test_final, clf.predict(X_test_pca)), ", f1_score", f1_score(y_test_final, clf.predict(X_test_pca)))
+#we see that the SVC class is a very weak learner and we should replace it with something better
+
+    
+(predictions_vot_clf == y_test_final).sum() / len(y_test_final)
+pres_test = precision_score(y_test_final, predictions_vot_clf)
+recall_test = recall_score(y_test_final, predictions_vot_clf)
+f1_score(y_test_final, predictions_vot_clf)
+
+
 
 print(f"The voting clf has default precision score of {pres_test} and recall score of{recall_test}")
 j = 0
@@ -400,14 +411,14 @@ j / ((predictions) == 1).sum()
 NN_preds = top_mod_NN.predict(X_test_pca)
 NN_dum = []
 for i in NN_preds:
-    if i < 0.7:
+    if i < 0.5:
         NN_dum.append(0)
-    if i > 0.7:
+    if i > 0.5:
         NN_dum.append(1)
 NN_dum
 precision_score(y_test_final, NN_dum)
 recall_score(y_test_final, NN_dum)
-
+f1_score(y_test_final, NN_dum)
 
 #we should consider that is possible that the models performance is overestimated because of the inbalance of the two classes populations  
 (y_test_final == 0).sum() / len(y_test_final)
