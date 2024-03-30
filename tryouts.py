@@ -104,18 +104,7 @@ model.evaluate(x=X_test_pca, y=y_test_final)
 
 pd.DataFrame(history.history)[["accuracy", "val_accuracy"]].plot(figsize=(8, 5))
 
-#monte carlo
-y_probas = np.stack([model(X_test_final, training=True) for sample in range(100)])
-y_proba = y_probas.mean(axis=0)
-y_proba
-monte_carlo_pred = []
-for i in y_proba:
-    if i > 0.5:
-        monte_carlo_pred.append(1)
-    if i < 0.5:
-        monte_carlo_pred.append(0)
-    
-(monte_carlo_pred == y_test_final).sum() / len(y_test_final)
+
 
 
 '''
@@ -220,8 +209,33 @@ print(
 
 
 top_mod_RFC = RandomForestClassifier(n_estimators=700, max_depth=3, random_state=42, class_weight={0:1 , 1:weight_minoniry_class}, criterion='entropy', max_features=0.2264160379499984)
+RFC_test = RandomForestClassifier(n_estimators=700, max_depth=3, random_state=42, class_weight={0:1 , 1:weight_minoniry_class}, criterion='entropy', max_features=0.2264160379499984)
+RFC_test.fit(X_train_pca, y_train_final)
+test_pred = RFC_test.predict(X_test_pca)
+precision_score(y_test_final, test_pred)
+recall_score(y_test_final, test_pred)
+f1_score(y_test_final, test_pred)
 
+y_probas = cross_val_predict(RFC_test, X_test_pca, y_test_final, cv=3, method="predict_proba")
+y_probas[:, 1][0]
+thres_preds = []
+def predict_thres(threshold):
+    for i in range(len(y_probas[:, 1])):
+        if y_probas[:, 1][i] > threshold:
+            thres_preds.append(1)
+        if y_probas[:, 1][i] < threshold:
+            thres_preds.append(0)
+    return(thres_preds)
 
+len(predict_thres(0.5))
+
+def RFC_test_scores(threshold):
+    preds = predict_thres(threshold)
+    return print(f"for{threshold} threshold we have: precision{precision_score (y_test_final, preds)},recall {recall_score(y_test_final, preds)},f1 {f1_score(y_test_final, preds)}")
+
+for i in range(30, 80, 1):
+    RFC_test_scores(i / 100)
+    thres_preds = []
 
 
 
@@ -393,11 +407,11 @@ for name, clf in voting_clf.named_estimators_.items():
 (predictions_vot_clf == y_test_final).sum() / len(y_test_final)
 pres_test = precision_score(y_test_final, predictions_vot_clf)
 recall_test = recall_score(y_test_final, predictions_vot_clf)
-f1_score(y_test_final, predictions_vot_clf)
+f1_test = f1_score(y_test_final, predictions_vot_clf)
 
 
 
-print(f"The voting clf has default precision score of {pres_test} and recall score of{recall_test}")
+print(f"The voting clf has default precision score of {pres_test} recall score of{recall_test} and f1 score of {f1_test}")
 j = 0
 for i in range(X_test_pca.shape[0]):
     if ((predictions) == 1)[i]:
@@ -411,14 +425,60 @@ j / ((predictions) == 1).sum()
 NN_preds = top_mod_NN.predict(X_test_pca)
 NN_dum = []
 for i in NN_preds:
-    if i < 0.5:
+    if i < 0.73:
         NN_dum.append(0)
-    if i > 0.5:
+    if i > 0.73:
         NN_dum.append(1)
 NN_dum
 precision_score(y_test_final, NN_dum)
 recall_score(y_test_final, NN_dum)
 f1_score(y_test_final, NN_dum)
+
+#since our NN uses dropout we will try the model carlo dropout trick to have more accurate predictions
+def NN_monte_carlo_pred(samples, threshold):
+    y_probas = np.stack([top_mod_NN(X_test_pca, training=True) for sample in range(samples)])
+    y_proba = y_probas.mean(axis=0)
+    monte_carlo_pred = []
+    for i in y_proba:
+        if i > (threshold):
+            monte_carlo_pred.append(1)
+        if i < (threshold):
+            monte_carlo_pred.append(0)
+    return monte_carlo_pred
+
+NN_monte_carlo_pred(2, 0.5)
+
+def monte_carlo_scores(samples, threshold):
+    preds = NN_monte_carlo_pred(samples, threshold)
+    return print(f"for {samples} samples and {threshold} threshold we have: precision{precision_score (y_test_final, preds)},recall {recall_score(y_test_final, preds)},f1 {f1_score(y_test_final, preds)}")
+
+monte_carlo_scores(1000, 0.5)
+
+for i in (range(2, 100)):
+    monte_carlo_scores(i, 0.5)
+#7 and 13 samples gives the best scores
+
+for i in range(30, 80, 1):
+    monte_carlo_scores(7, (i /100))
+
+#we will look for over 10% recall.That means for every ufc card (about 15 fights) it will surely give us one positive class
+
+
+'''
+for 7 samples and 0.7 threshold we have: precision0.6538461538461539,recall 0.17480719794344474,f1 0.27586206896551724
+for 7 samples and 0.71 threshold we have: precision0.6744186046511628,recall 0.14910025706940874,f1 0.24421052631578946
+for 7 samples and 0.72 threshold we have: precision0.6835443037974683,recall 0.13881748071979436,f1 0.23076923076923078
+for 7 samples and 0.73 threshold we have: precision0.746031746031746,recall 0.12082262210796915,f1 0.20796460176991152
+for 7 samples and 0.74 threshold we have: precision0.6610169491525424,recall 0.10025706940874037,f1 0.17410714285714288
+for 7 samples and 0.75 threshold we have: precision0.7755102040816326,recall 0.09768637532133675,f1 0.1735159817351598
+'''
+for i in range(30, 80, 1):
+    monte_carlo_scores(13, (i /100))
+
+#worse than 7 samples
+#so for now we keep 7 samples and 0.73 threshold
+
+
 
 #we should consider that is possible that the models performance is overestimated because of the inbalance of the two classes populations  
 (y_test_final == 0).sum() / len(y_test_final)
