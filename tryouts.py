@@ -208,7 +208,15 @@ print(
 #{'max_depth': 3, 'n_estimators': 700, 'criterion': 'entropy', 'max_features': 0.2264160379499984}
 
 
+
 top_mod_RFC = RandomForestClassifier(n_estimators=700, max_depth=3, random_state=42, class_weight={0:1 , 1:weight_minoniry_class}, criterion='entropy', max_features=0.2264160379499984)
+top_mod_RFC.fit(X_train_pca, y_train_final)
+
+#Its time to choose the right balance between precision and recall.I believe that the metric that i should give the most of the weight is precision.
+#I look at it as a gambler's view.Its way more important that you are more certain about the correct winner than finding the most correct winners, if you are gonna bet for the winner.
+#we will look for over 10% recall.That means for every ufc card (about 15 fights) it will surely give us one positive class
+
+
 RFC_test = RandomForestClassifier(n_estimators=700, max_depth=3, random_state=42, class_weight={0:1 , 1:weight_minoniry_class}, criterion='entropy', max_features=0.2264160379499984)
 RFC_test.fit(X_train_pca, y_train_final)
 test_pred = RFC_test.predict(X_test_pca)
@@ -216,10 +224,11 @@ precision_score(y_test_final, test_pred)
 recall_score(y_test_final, test_pred)
 f1_score(y_test_final, test_pred)
 
-y_probas = cross_val_predict(RFC_test, X_test_pca, y_test_final, cv=3, method="predict_proba")
+y_probas = top_mod_RFC.predict_proba(X_test_pca)
 y_probas[:, 1][0]
-thres_preds = []
-def predict_thres(threshold):
+
+def predict_thres_RFC(threshold):
+    thres_preds = []
     for i in range(len(y_probas[:, 1])):
         if y_probas[:, 1][i] > threshold:
             thres_preds.append(1)
@@ -227,16 +236,22 @@ def predict_thres(threshold):
             thres_preds.append(0)
     return(thres_preds)
 
-len(predict_thres(0.5))
+len(predict_thres_RFC(0.5))
 
 def RFC_test_scores(threshold):
-    preds = predict_thres(threshold)
+    preds = predict_thres_RFC(threshold)
     return print(f"for{threshold} threshold we have: precision{precision_score (y_test_final, preds)},recall {recall_score(y_test_final, preds)},f1 {f1_score(y_test_final, preds)}")
 
 for i in range(30, 80, 1):
     RFC_test_scores(i / 100)
-    thres_preds = []
 
+'''
+for0.54 threshold we have: precision0.5081081081081081,recall 0.2416452442159383,f1 0.32752613240418116
+for0.55 threshold we have: precision0.5897435897435898,recall 0.17737789203084833,f1 0.27272727272727276
+for0.56 threshold we have: precision0.6086956521739131,recall 0.10796915167095116,f1 0.18340611353711792
+for0.57 threshold we have: precision0.675,recall 0.06940874035989718,f1 0.1258741258741259
+we keep 0.55 thres
+'''
 
 
 
@@ -390,7 +405,6 @@ print(
 top_mod_ABC = AdaBoostClassifier(DecisionTreeClassifier(max_depth=2), n_estimators=34, learning_rate=0.10781322577235282)
 
 estimators = [
-    ('RFC', top_mod_RFC),
     ('GBC', top_mod_GBC),
     ('ABC', top_mod_ABC),
 ]
@@ -412,6 +426,31 @@ f1_test = f1_score(y_test_final, predictions_vot_clf)
 
 
 print(f"The voting clf has default precision score of {pres_test} recall score of{recall_test} and f1 score of {f1_test}")
+probas = voting_clf.predict_proba(X_test_pca)
+
+win_one = probas[:, 1]
+
+def voting_clf_preds(threshold):
+    predictions = []
+    for i in range(len(X_test_pca)):
+        if win_one[i] > (threshold):
+            predictions.append(1)
+        if win_one[i] < (threshold):
+            predictions.append(0)
+    return predictions
+
+voting_scores(0.5)
+
+def voting_scores(threshold):
+    preds = voting_clf_preds(threshold=threshold)
+    return print(f"for{threshold} threshold we have: precision{precision_score (y_test_final, preds)},recall {recall_score(y_test_final, preds)},f1 {f1_score(y_test_final, preds)}")
+    
+for i in range(30, 80, 1):
+    voting_scores(i / 100)
+
+#for0.51 threshold we have: precision0.6082474226804123,recall 0.15167095115681234,f1 0.24279835390946503
+
+voting_clf_preds(0.51)
 j = 0
 for i in range(X_test_pca.shape[0]):
     if ((predictions) == 1)[i]:
@@ -461,8 +500,8 @@ for i in (range(2, 100)):
 for i in range(30, 80, 1):
     monte_carlo_scores(7, (i /100))
 
-#we will look for over 10% recall.That means for every ufc card (about 15 fights) it will surely give us one positive class
 
+    
 
 '''
 for 7 samples and 0.7 threshold we have: precision0.6538461538461539,recall 0.17480719794344474,f1 0.27586206896551724
@@ -477,10 +516,104 @@ for i in range(30, 80, 1):
 
 #worse than 7 samples
 #so for now we keep 7 samples and 0.73 threshold
+NN_preds = NN_monte_carlo_pred(7, 0.73)
+
+        
 
 
 
-#we should consider that is possible that the models performance is overestimated because of the inbalance of the two classes populations  
+# we make one final predictor.
+#This will hard vote the predictions of our previous voting predictor, the monte carlo NN and the RFC , with the thresholds that we found optimal
+final_predictions = []
+NN_preds
+for i in range(len(predict_thres_RFC(0.55))):
+    j = NN_preds[i] + voting_clf_preds(0.51)[i] + predict_thres_RFC(0.55)[i]
+    if j > 1.5:
+        final_predictions.append(1)
+    if j < 1.5:
+        final_predictions.append(0)
+            
+len(final_predictions)
+
+print(f"we have: precision{precision_score (y_test_final, final_predictions)},recall {recall_score(y_test_final, final_predictions)},f1 {f1_score(y_test_final, final_predictions)}")
+#we have: precision0.6153846153846154,recall 0.14395886889460155,f1 0.23333333333333336
+
+#lets make a prediction function
+
+def NN_monte_carlo_pred_general(test_set):
+    y_probas = np.stack([top_mod_NN(test_set, training=True) for sample in range(7)])
+    y_proba = y_probas.mean(axis=0)
+    monte_carlo_pred = []
+    for i in y_proba:
+        if i > (0.73):
+            monte_carlo_pred.append(1)
+        if i < (0.73):
+            monte_carlo_pred.append(0)
+    return monte_carlo_pred
+
+
+
+def voting_clf_gen(test_set):
+    probas = voting_clf.predict_proba(test_set)
+    win_one = probas[:, 1]
+    predictions = []
+    for i in range(len(test_set)):
+        if win_one[i] > (0.51):
+            predictions.append(1)
+        if win_one[i] < (0.51):
+            predictions.append(0)
+    return predictions
+
+
+
+def RFC_gen(test_set):
+    y_probas = top_mod_RFC.predict_proba(test_set)
+    win_one = y_probas[:, 1]
+    thres_preds = []
+    for i in range(len(test_set)):
+        if win_one[i] > 0.55:
+            thres_preds.append(1)
+        if win_one[i] < 0.55:
+            thres_preds.append(0)
+    return(thres_preds)
+
+
+def final_predictor(test_set):
+    final_predictions = []
+    NN_preds_gen = NN_monte_carlo_pred_general(test_set=test_set)
+    voting_predictor = voting_clf_gen(test_set=test_set)
+    RFC_predictor = RFC_gen(test_set=test_set)
+    for i in range(len(test_set)):
+        j = NN_preds_gen[i] + voting_predictor[i] + RFC_predictor[i]
+        if j > 1.5:
+            final_predictions.append(1)
+        if j < 1.5:
+            final_predictions.append(0)
+    return final_predictions
+
+
+print(f"we have: precision{precision_score (y_test_final, final_predictor(X_test_pca))},recall {recall_score(y_test_final, final_predictor(X_test_pca))},f1 {f1_score(y_test_final, final_predictor(X_test_pca))}")
+#Winner 1 means that the blue corner will win and 0 means the red
+#Our classifier has this precision and recall only for predicting the blue corner winner outcome and not the red one
+
+winner_red_corner = (y_test_final == 0)
+
+j = 0 
+k = 0
+for i in range(len(y_test_final)):
+    if (final_predictions[i] == 0):
+        k = k + 1
+        if winner_red_corner[i]:
+            j = j + 1
+
+print(j / k)
+#precision for red corner win (0.63%)
+
+print(j / winner_red_corner.sum())
+#recall for red corner win (0.94%)
+#that is can not be valid.It is happening because there is an unbalance between the number of instances on the 2 classes on the test test.Lets make a fair test set
+
+
 (y_test_final == 0).sum() / len(y_test_final)
 (y_test_final == 1).sum()
 y_test_fair = y_test_final.copy()
@@ -499,68 +632,26 @@ for index in y_test_fair.index:
 (y_test_fair == 0).sum() / (y_test_fair == 1).sum()
 #the _fair X and y test set have the same number of instances classified as 0 and 1
 
-(voting_clf.predict(X_test_fair_pca) == y_test_fair).sum() / y_test_fair.shape[0]
-#53%
-top_mod_NN.evaluate(x=X_test_fair_pca, y=y_test_fair)
-#58%
+pred_for_fair_test_set = final_predictor(X_test_fair_pca)
+print(f"we have: precision{precision_score (y_test_fair, final_predictor(X_test_fair_pca))},recall {recall_score(y_test_fair, final_predictor(X_test_fair_pca))},f1 {f1_score(y_test_fair, final_predictor(X_test_fair_pca))}")
 
-#We see that the performance of the gbcl predictor (that doesnt have a class_weight parameter) drop significantly
-'''
-#Its time to choose the right balance between precision and recall.I believe that the metric that i should give the most of the weight is precision.
-#I look at it as a gambler's view.Its way more important that you are more certain about the correct winner than finding the most correct winners, if you are gonna bet for the winner.
+#we have: precision0.725,recall 0.15167095115681234,f1 0.24733475479744138
 
 
-(top_mod_RFC.predict(X_test_fair_pca) == 1).sum() 
-#manually calculating precision score to be sure
-top_mod_RFC.predict(X_test_fair_pca) == 1
-j = 0
-for i in range(X_test_fair_pca.shape[0]):
-    if (top_mod_RFC.predict(X_test_fair_pca) == 1)[i]:
-        if (y_test_fair == 1).tolist()[i]:
+winner_red_corner_fair = (y_test_fair == 0)
+
+j = 0 
+k = 0
+for i in range(len(y_test_fair.reset_index())):
+    if (pred_for_fair_test_set[i] == 0):
+        k = k + 1
+        if (winner_red_corner_fair.reset_index()['Winner'][i]):
             j = j + 1
 
-print(j / (top_mod_RFC.predict(X_test_fair_pca) == 1).sum())
+print(j / k)
+#precision for red corner win (0.52%)
 
+print(j / winner_red_corner_fair.sum())
+#recall for red corner win (0.95%)
 
-RFC_winner_one_pred = (top_mod_RFC.predict(X_test_fair_pca) == 1)
-y_test_winner_one = (y_test_fair == 1)
-
-confusion_matrix(y_test_winner_one, RFC_winner_one_pred)
-precision_score(y_test_winner_one, RFC_winner_one_pred)
-recall_score(y_test_winner_one, RFC_winner_one_pred)
-
-#Winner 0 means red corner winner 1 means blue corner winner
-
-y_probas = cross_val_predict(top_mod_RFC, X_test_fair_pca, y_test_fair, cv=3, method="predict_proba")
-y_scores = y_probas[:, 1]
-precisions, recalls, thresholds = precision_recall_curve(y_test_fair, y_scores)
-plt.plot(thresholds, precisions[:-1], label='Precision')
-plt.plot(thresholds, recalls[:-1], label='Recall')
-plt.show()
-
-precisions[:-1].max()
-idx_for_80_prec = (precisions > 0.80).argmax()
-est_prob_thresh_win_one = thresholds[idx_for_80_prec]
-y_pred_80_prec = (y_scores >= est_prob_thresh_win_one)
-precision_score(y_test_fair, y_pred_80_prec)
-#81%
-recall_score(y_test_fair, y_pred_80_prec)
-#7%
-
-#We see that if we trust this classifier where he outputs an estimated probability over 67% for the blue to win, we will have about 80% precision 
-#So for the test set if this classifier predicts that red is gonna win,there is about 80%chance it is correct but it will be able to predict about the 7% of all the winners
-#But because a very low estimated probability means a high precision that red is gonna win,where we can also bet on.
-
-precisions_2, recalls_2, thresholds_2 = precision_recall_curve(y_test_fair, y_probas[:, 0])
-idx_for_80_prec_2 = (precisions_2 > 0.70).argmax()
-est_prob_thresh_loss_one = thresholds_2[idx_for_80_prec_2]
-y_pred_80_prec_2 = (y_probas[:, 0] >= est_prob_thresh_loss_one)
-precision_score(y_test_fair, y_pred_80_prec_2)
-#80%
-recall_score(y_test_fair, y_pred_80_prec_2)
-#1%
-
-#we see that in order to have over 80% precision on the classifier for the blue to lose we need below 1-est_prob_thresh_loss_one = 0.36 on our y_scores list (the classifier estimated probabilities)
-
-#all in all if  y_score>0.67 or y_score<0.36 we can trust it with about 80% precision for the blue corner to win or lose 
-'''
+#So we clearly see now that the model is not fit to accurately predict the red corner winner in this test set
