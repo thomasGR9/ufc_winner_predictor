@@ -224,8 +224,9 @@ precision_score(y_test_final, test_pred)
 recall_score(y_test_final, test_pred)
 f1_score(y_test_final, test_pred)
 
-y_probas = top_mod_RFC.predict_proba(X_test_pca)
-y_probas[:, 1][0]
+y_probas = cross_val_predict(top_mod_RFC, X_train_pca, y_train_final, cv=3, method="predict_proba")
+
+len(y_probas[:, 1])
 
 def predict_thres_RFC(threshold):
     thres_preds = []
@@ -240,16 +241,16 @@ len(predict_thres_RFC(0.5))
 
 def RFC_test_scores(threshold):
     preds = predict_thres_RFC(threshold)
-    return print(f"for{threshold} threshold we have: precision{precision_score (y_test_final, preds)},recall {recall_score(y_test_final, preds)},f1 {f1_score(y_test_final, preds)}")
+    return print(f"for{threshold} threshold we have: precision{precision_score (y_train_final, preds)},recall {recall_score(y_train_final, preds)},f1 {f1_score(y_train_final, preds)}")
 
 for i in range(30, 80, 1):
     RFC_test_scores(i / 100)
 
 '''
-for0.54 threshold we have: precision0.5081081081081081,recall 0.2416452442159383,f1 0.32752613240418116
-for0.55 threshold we have: precision0.5897435897435898,recall 0.17737789203084833,f1 0.27272727272727276
-for0.56 threshold we have: precision0.6086956521739131,recall 0.10796915167095116,f1 0.18340611353711792
-for0.57 threshold we have: precision0.675,recall 0.06940874035989718,f1 0.1258741258741259
+for0.54 threshold we have: precision0.5823353293413174,recall 0.26516700749829586,f1 0.36440281030444965
+for0.55 threshold we have: precision0.5914221218961625,recall 0.17859577368779822,f1 0.27434554973821984
+for0.56 threshold we have: precision0.6037037037037037,recall 0.1111111111111111,f1 0.1876799078871618
+
 we keep 0.55 thres
 '''
 
@@ -425,30 +426,30 @@ f1_test = f1_score(y_test_final, predictions_vot_clf)
 
 
 
-print(f"The voting clf has default precision score of {pres_test} recall score of{recall_test} and f1 score of {f1_test}")
-probas = voting_clf.predict_proba(X_test_pca)
+print(f"The voting cglf has default precision score of {pres_test} recall score of{recall_test} and f1 score of {f1_test}")
+probas_voting_clf = cross_val_predict(voting_clf, X_train_pca, y_train_final, cv=3, method="predict_proba")
 
-win_one = probas[:, 1]
+win_one_voting = probas_voting_clf[:, 1]
 
 def voting_clf_preds(threshold):
     predictions = []
-    for i in range(len(X_test_pca)):
-        if win_one[i] > (threshold):
+    for i in range(len(X_train_pca)):
+        if win_one_voting[i] > (threshold):
             predictions.append(1)
-        if win_one[i] < (threshold):
+        if win_one_voting[i] < (threshold):
             predictions.append(0)
     return predictions
 
-voting_scores(0.5)
+len(voting_clf_preds(0.5))
 
 def voting_scores(threshold):
     preds = voting_clf_preds(threshold=threshold)
-    return print(f"for{threshold} threshold we have: precision{precision_score (y_test_final, preds)},recall {recall_score(y_test_final, preds)},f1 {f1_score(y_test_final, preds)}")
+    return print(f"for{threshold} threshold we have: precision{precision_score (y_train_final, preds)},recall {recall_score(y_train_final, preds)},f1 {f1_score(y_train_final, preds)}")
     
 for i in range(30, 80, 1):
     voting_scores(i / 100)
 
-#for0.51 threshold we have: precision0.6082474226804123,recall 0.15167095115681234,f1 0.24279835390946503
+#for0.51 threshold we have: precision0.5984555984555985,recall 0.1056578050443081,f1 0.17960602549246812
 
 voting_clf_preds(0.51)
 j = 0
@@ -639,19 +640,87 @@ print(f"we have: precision{precision_score (y_test_fair, final_predictor(X_test_
 
 
 winner_red_corner_fair = (y_test_fair == 0)
-
-j = 0 
-k = 0
-for i in range(len(y_test_fair.reset_index())):
-    if (pred_for_fair_test_set[i] == 0):
-        k = k + 1
-        if (winner_red_corner_fair.reset_index()['Winner'][i]):
+def scores_for_neg_class(X_test, y_test):
+    pred_for_test_set = final_predictor(X_test)
+    winner_red_corner = (y_test == 0)
+    j = 0 
+    k = 0
+    for i in range(len(y_test.reset_index())):
+        if (pred_for_test_set[i] == 0):
+            k = k + 1
+        if (winner_red_corner.reset_index()['Winner'][i]):
             j = j + 1
+    precision = j / k
+    recall = j / winner_red_corner.sum()
+    f1 = 2 * ((precision * recall) / (precision + recall))
+    return print(f"we have: precision {precision},recall {recall},f1 {f1}")
 
-print(j / k)
-#precision for red corner win (0.52%)
+scores_for_neg_class(X_test_fair_pca, y_test_fair)
+#we have: precision 0.5401662049861495,recall 1.0,f1 0.7014388489208633
 
-print(j / winner_red_corner_fair.sum())
-#recall for red corner win (0.95%)
+#So we clearly see now that the model is not fit to accurately predict the red corner winner (with our required precision) in this test set
+#This is happening because we append 1 only to the very confident predictions about this class but we label 0 all the other without concern about the confidence
+#Considering that in reality the outcome of an ufc fight should not rely on witch corner the fighter is on (red or blue) it must be valid to use the same confidence thresholds for the 2 labels of the predict proba methods
+#So now we will configure the functions we defined above (for the final predictor) such as we have the same precision scores for the two predicted labels 
+#We will do this by appending 1 with the predict proba threshold we currently have, but will append 0 if the predict proba for this class is lower than (1 - threshold_for_one)
+#All the rest predictions that their predict proba is low for the precision we aim will be imputed by some text like (not sure enough)
+#That approach will make the predictor output this text most of the times, but when it gives a class prediction we can expect that it is very confident about it
 
-#So we clearly see now that the model is not fit to accurately predict the red corner winner in this test set
+
+def NN_monte_carlo_pred_general_negative(test_set):
+    y_probas = np.stack([top_mod_NN(test_set, training=True) for sample in range(7)])
+    y_proba = y_probas.mean(axis=0)
+    monte_carlo_pred = []
+    for i in y_proba:
+        if i > (0.73):
+            monte_carlo_pred.append(1)
+        if i < (0.73):
+            monte_carlo_pred.append(0)
+    return monte_carlo_pred
+
+
+
+def voting_clf_gen_negative(test_set):
+    probas = voting_clf.predict_proba(test_set)
+    win_zero = probas[:, 0]
+    predictions = []
+    for i in range(len(test_set)):
+        if win_zero[i] > (0.51):
+            predictions.append(0)
+        if win_zero[i] < (0.51):
+            predictions.append(1)
+    return predictions
+
+
+
+def RFC_gen_negative(test_set):
+    y_probas = top_mod_RFC.predict_proba(test_set)
+    win_zero = y_probas[:, 0]
+    thres_preds = []
+    for i in range(len(test_set)):
+        if win_zero[i] > 0.55:
+            thres_preds.append(0)
+        if win_zero[i] < 0.55:
+            thres_preds.append(1)
+    return(thres_preds)
+
+
+def final_predictor_negative(test_set):
+    final_predictions = []
+    NN_preds_gen = NN_monte_carlo_pred_general(test_set=test_set)
+    voting_predictor = voting_clf_gen(test_set=test_set)
+    RFC_predictor = RFC_gen(test_set=test_set)
+    for i in range(len(test_set)):
+        j = NN_preds_gen[i] + voting_predictor[i] + RFC_predictor[i]
+        if j > 1.5:
+            final_predictions.append(1)
+        if j < 1.5:
+            final_predictions.append(0)
+    return final_predictions
+
+
+y_probas = np.stack([top_mod_NN(X_test_pca, training=True) for sample in range(7)])
+y_proba = y_probas.mean(axis=0)
+
+voting_clf_gen_negative(X_test_pca)
+RFC_gen_negative(X_test_pca)
