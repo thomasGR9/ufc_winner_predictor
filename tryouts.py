@@ -411,7 +411,8 @@ estimators = [
 ]
 
 voting_clf = VotingClassifier(estimators=estimators, voting='soft')
-voting_clf.fit(X_train_pca, y_train_final)
+
+'''voting_clf.fit(X_train_pca, y_train_final)
 voting_clf.estimators_
 predictions_vot_clf = voting_clf.predict(X_test_pca)
 for name, clf in voting_clf.named_estimators_.items():
@@ -423,10 +424,118 @@ for name, clf in voting_clf.named_estimators_.items():
 pres_test = precision_score(y_test_final, predictions_vot_clf)
 recall_test = recall_score(y_test_final, predictions_vot_clf)
 f1_test = f1_score(y_test_final, predictions_vot_clf)
-
-
-
 print(f"The voting cglf has default precision score of {pres_test} recall score of{recall_test} and f1 score of {f1_test}")
+'''
+#this function will print the average classification scores of a model on 3 different test sets (who have equal number of negative and positive classes).The model is fitted on a different training set (would be x - test set) that 3 times 
+def probas_stratify_kfolds(model, x, y, threshold):
+    model = model
+    kf = StratifiedKFold(n_splits=3)
+    probas = []
+    mean_probas = []
+    precisions = []
+    recalls = []
+    f1s = []
+    for idx in kf.split(X=x, y=y):
+        predictions = []
+        train_idx, test_idx = idx[0], idx[1]
+        xtrain = x.loc[train_idx]
+        ytrain = y.loc[train_idx]
+        
+        xtest = x.loc[test_idx]
+        ytest = y.loc[test_idx]
+        
+        model.fit(xtrain, ytrain)
+        preds = model.predict_proba(xtest)
+        win_one_proba = preds[:, 1]
+        for i in range(len(xtest)):
+            if win_one_proba[i] > (threshold):
+                predictions.append(1)
+            if win_one_proba[i] < (threshold):
+                predictions.append(0) 
+        precision = precision_score(ytest, predictions)
+        recall = recall_score(ytest, predictions)
+        f1 = f1_score(ytest, predictions)
+        precisions.append(precision)
+        recalls.append(recall)
+        f1s.append(f1)
+    avg_prec = sum(precisions) / len(precisions)
+    avg_recall = sum(recalls) / len(recalls)
+    avg_f1 = sum(f1s) / len(f1s)
+    return print(f"for{threshold} threshold we have: precision{avg_prec},recall {avg_recall},f1 {avg_f1}")
+
+for i in range(40, 55, 1):
+    probas_stratify_kfolds(voting_clf, x=X_train_pca, y=y_train_final, threshold=i / 100)
+'''
+for0.5 threshold we have: precision0.5769526287754135,recall 0.17998421211488008,f1 0.27341285833782764
+for0.51 threshold we have: precision0.5746671876600384,recall 0.13025933923057276,f1 0.2098909368582988
+'''
+
+for i in range(50, 60, 1):
+    probas_stratify_kfolds(top_mod_RFC, x=X_train_pca, y=y_train_final, threshold=i / 100)
+
+'''
+for0.54 threshold we have: precision0.5732706619663142,recall 0.2666039794757493,f1 0.36167421899877217
+for0.55 threshold we have: precision0.5991514621299199,recall 0.17863295488844003,f1 0.273539911778129
+for0.56 threshold we have: precision0.6175968595323433,recall 0.11182698335306818,f1 0.188151075833639
+'''
+#we will make a modified version of the above function for the NN since we cant train it (fit it)
+def probas_stratify_kfolds_NN(model, x, y, threshold, samples):
+    model = model
+    kf = StratifiedKFold(n_splits=3)
+    probas = []
+    mean_probas = []
+    precisions = []
+    recalls = []
+    f1s = []
+    for idx in kf.split(X=x, y=y):
+        predictions = []
+        train_idx, test_idx = idx[0], idx[1]
+        xtrain = x.loc[train_idx]
+        ytrain = y.loc[train_idx]
+        
+        xtest = x.loc[test_idx]
+        ytest = y.loc[test_idx]
+        
+        
+        preds = np.stack([model(xtest, training=True) for sample in range(samples)])
+        win_one_proba = preds.mean(axis=0)
+        for i in range(len(xtest)):
+            if win_one_proba[i] > (threshold):
+                predictions.append(1)
+            if win_one_proba[i] < (threshold):
+                predictions.append(0) 
+        precision = precision_score(ytest, predictions)
+        recall = recall_score(ytest, predictions)
+        f1 = f1_score(ytest, predictions)
+        precisions.append(precision)
+        recalls.append(recall)
+        f1s.append(f1)
+    avg_prec = sum(precisions) / len(precisions)
+    avg_recall = sum(recalls) / len(recalls)
+    avg_f1 = sum(f1s) / len(f1s)
+    return print(f"for{threshold} threshold and samples {samples} we have: precision{avg_prec},recall {avg_recall},f1 {avg_f1}")
+
+
+for i in range(65, 80, 1):
+    for j in range(2, 15, 1):
+        probas_stratify_kfolds_NN(top_mod_NN, x=X_train_pca, y=y_train_final, threshold=i / 100, samples=j)
+
+'''
+for0.74 threshold and samples 3 we have: precision0.809598471149104,recall 0.1301976823449216,f1 0.22431388245012188
+'''
+
+
+
+'''
+for0.7 threshold we have: precision0.7661371563333953,recall 0.19768234492160874,f1 0.31423857273636924
+for0.71 threshold we have: precision0.7589078037932596,recall 0.17450579413769596,f1 0.28359892451964064
+for0.72 threshold we have: precision0.7688079522237938,recall 0.158145875937287,f1 0.2622797583249561
+for0.73 threshold we have: precision0.7803480942938973,recall 0.13769597818677573,f1 0.2340723950986420
+'''
+
+for i in range(2, 15, 1):
+    probas_stratify_kfolds_NN(top_mod_NN, x=X_train_pca, y=y_train_final, threshold=0.71, samples=i)
+'''
 probas_voting_clf = cross_val_predict(voting_clf, X_train_pca, y_train_final, cv=3, method="predict_proba")
 
 win_one_voting = probas_voting_clf[:, 1]
@@ -450,8 +559,8 @@ for i in range(30, 80, 1):
     voting_scores(i / 100)
 
 #for0.51 threshold we have: precision0.5984555984555985,recall 0.1056578050443081,f1 0.17960602549246812
-
-voting_clf_preds(0.51)
+'''
+voting_scores(0.50)
 j = 0
 for i in range(X_test_pca.shape[0]):
     if ((predictions) == 1)[i]:
@@ -486,13 +595,13 @@ def NN_monte_carlo_pred(samples, threshold):
             monte_carlo_pred.append(0)
     return monte_carlo_pred
 
-NN_monte_carlo_pred(2, 0.5)
+NN_monte_carlo_pred(7, 0.7)
 
 def monte_carlo_scores(samples, threshold):
     preds = NN_monte_carlo_pred(samples, threshold)
     return print(f"for {samples} samples and {threshold} threshold we have: precision{precision_score (y_test_final, preds)},recall {recall_score(y_test_final, preds)},f1 {f1_score(y_test_final, preds)}")
 
-monte_carlo_scores(1000, 0.5)
+monte_carlo_scores(7, 0.7)
 
 for i in (range(2, 100)):
     monte_carlo_scores(i, 0.5)
