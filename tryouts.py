@@ -21,12 +21,16 @@ import matplotlib.pyplot as plt
 from sklearn.model_selection import cross_val_predict
 from sklearn.ensemble import BaggingClassifier
 
-X_train_full = pd.read_csv('./X_train_concat.csv', dtype=np.float64)
-X_test_full = pd.read_csv('./X_test_concat.csv', dtype=np.float64)
-y_train = pd.read_csv('./y_train.csv', dtype=np.float64)
-y_test = pd.read_csv('./y_test.csv', dtype=np.float64)
+X_train_full_1 = pd.read_csv('./X_train_concat_branch.csv', dtype=np.float64)
+X_test_full_1 = pd.read_csv('./X_test_concat_branch.csv', dtype=np.float64)
+y_train_1 = pd.read_csv('./y_train_branch.csv', dtype=np.float64)
+y_test_1 = pd.read_csv('./y_test_branch.csv', dtype=np.float64)
 
-X_train_without_pca_full = pd.read_csv('./X_train_num_scaled.csv', dtype=np.float64)
+
+
+
+
+X_train_without_pca_full = pd.read_csv('./X_train_num_scaled_branch.csv', dtype=np.float64)
 X_test_without_pca_full = pd.read_csv('./X_test_num_scaled.csv', dtype=np.float64)
 
 #X with pca and cat
@@ -50,6 +54,27 @@ y_train_final = y_train[:3500].select_dtypes(np.float64)['Winner']
 y_valid_final = y_train[3500:].select_dtypes(np.float64)['Winner']
 y_test_final = y_test.copy()['Winner']
 y_train_full = y_train.copy()
+
+
+(y_train_1 == 1).sum() / (y_train_1 == 0).sum()
+(y_test_1 == 1).sum() / (y_test_1 == 0).sum()
+
+#we will make it 1
+
+y_test_fair = y_test_final.copy()
+X_test_fair_pca = X_test_pca.copy()
+X_test_fair_pca_cat = X_test_pca_cat.copy()
+i = 0
+         
+for index in y_test_fair.index:
+    if (y_test_fair[index] == 0.0):
+        i = i + 1
+        if (i < 202):
+            y_test_fair.drop(index, inplace=True)
+            X_test_fair_pca.drop(index, inplace=True)
+            X_test_fair_pca_cat.drop(index, inplace=True)
+
+
 
 
 n_units = 300
@@ -651,7 +676,7 @@ print(f"we have: precision{precision_score (y_test_final, final_predictions)},re
 #lets make a prediction function
 
 def NN_monte_carlo_pred_general(test_set):
-    y_probas = np.stack([top_mod_NN(test_set, training=True) for sample in range(7)])
+    y_probas = np.stack([top_mod_NN(test_set, training=True) for sample in range(3)])
     y_proba = y_probas.mean(axis=0)
     monte_carlo_pred = []
     for i in y_proba:
@@ -661,20 +686,20 @@ def NN_monte_carlo_pred_general(test_set):
             monte_carlo_pred.append(0)
     return monte_carlo_pred
 
-
+len(NN_monte_carlo_pred_general(X_test_pca))
 
 def voting_clf_gen(test_set):
     probas = voting_clf.predict_proba(test_set)
     win_one = probas[:, 1]
     predictions = []
     for i in range(len(test_set)):
-        if win_one[i] > (0.51):
+        if win_one[i] > (0.50):
             predictions.append(1)
-        if win_one[i] < (0.51):
+        if win_one[i] < (0.50):
             predictions.append(0)
     return predictions
 
-
+(RFC_gen(X_test_pca))
 
 def RFC_gen(test_set):
     y_probas = top_mod_RFC.predict_proba(test_set)
@@ -701,8 +726,10 @@ def final_predictor(test_set):
             final_predictions.append(0)
     return final_predictions
 
+final_predictor(X_test_fair_pca)
 
-print(f"we have: precision{precision_score (y_test_final, final_predictor(X_test_pca))},recall {recall_score(y_test_final, final_predictor(X_test_pca))},f1 {f1_score(y_test_final, final_predictor(X_test_pca))}")
+
+print(f"we have: precision{precision_score (y_test_fair, final_predictor(X_test_fair_pca))},recall {recall_score(y_test_fair, final_predictor(X_test_fair_pca))},f1 {f1_score(y_test_fair, final_predictor(X_test_fair_pca))}")
 #Winner 1 means that the blue corner will win and 0 means the red
 #Our classifier has this precision and recall only for predicting the blue corner winner outcome and not the red one
 
@@ -757,8 +784,8 @@ def scores_for_neg_class(X_test, y_test):
     for i in range(len(y_test.reset_index())):
         if (pred_for_test_set[i] == 0):
             k = k + 1
-        if (winner_red_corner.reset_index()['Winner'][i]):
-            j = j + 1
+            if (winner_red_corner.reset_index()['Winner'][i]):
+                j = j + 1
     precision = j / k
     recall = j / winner_red_corner.sum()
     f1 = 2 * ((precision * recall) / (precision + recall))
@@ -789,30 +816,77 @@ def NN_monte_carlo_pred_general_negative(test_set):
 
 
 
-def voting_clf_gen_negative(test_set):
-    probas = voting_clf.predict_proba(test_set)
-    win_zero = probas[:, 0]
-    predictions = []
-    for i in range(len(test_set)):
-        if win_zero[i] > (0.51):
-            predictions.append(0)
-        if win_zero[i] < (0.51):
-            predictions.append(1)
-    return predictions
 
 
 
-def RFC_gen_negative(test_set):
-    y_probas = top_mod_RFC.predict_proba(test_set)
+
+def model_gen_negative(model, test_set, threshold):
+    y_probas = model.predict_proba(test_set)
     win_zero = y_probas[:, 0]
     thres_preds = []
     for i in range(len(test_set)):
-        if win_zero[i] > 0.55:
+        if win_zero[i] > (threshold):
             thres_preds.append(0)
-        if win_zero[i] < 0.55:
+        if win_zero[i] < (threshold):
             thres_preds.append(1)
     return(thres_preds)
+for i in range(30, 50, 1):
+    print(f"for threshold {i / 100} we have: precision{precision_score(y_test_fair, model_gen_negative(model = top_mod_RFC , test_set=X_test_fair_pca, threshold=i / 100))},recall {recall_score(y_test_fair, model_gen_negative(model = top_mod_RFC , test_set=X_test_fair_pca, threshold=i / 100))},f1 {f1_score(y_test_fair, model_gen_negative(model = top_mod_RFC , test_set=X_test_fair_pca, threshold=i / 100))}")    
 
+
+def model_gen_test(model, test_set, threshold):
+    y_probas = model.predict_proba(test_set)
+    win_zero = y_probas[:, 1]
+    thres_preds = []
+    for i in range(len(test_set)):
+        if win_zero[i] >= (threshold):
+            thres_preds.append(1)
+        if win_zero[i] <= (1 - threshold):
+            thres_preds.append(0)
+        elif ((win_zero[i] < (threshold)) and (win_zero[i] > (1 - threshold))):
+            thres_preds.append(-1)
+    return(thres_preds)
+
+        
+
+
+def metrics_for_both_classes(model, test_set_x, test_set_y, threshold):
+    preds_test = model_gen_test(model = model, test_set = test_set_x, threshold = threshold)
+    predicted_zero = 0
+    predicted_one = 0
+    predicted_none = 0
+    correct_zero = 0
+    correct_one = 0
+    winner_zero = (test_set_y == 0).reset_index()['Winner']
+    winner_one = (test_set_y == 1).reset_index()['Winner']
+    for i in range(len(test_set_x)):
+        if (preds_test[i] == 0):
+            predicted_zero = predicted_zero + 1
+            if winner_zero[i]:
+                correct_zero = correct_zero + 1
+        if (preds_test[i] == 1):
+            predicted_one = predicted_one + 1
+            if winner_one[i]:
+                correct_one = correct_one + 1
+        if (preds_test[i] == -1):
+            predicted_none = predicted_none + 1
+    precision_zero = correct_zero / predicted_zero
+    recall_zero = correct_zero / winner_zero.sum()
+    precision_one = correct_one / predicted_one
+    recall_one = correct_one / winner_one.sum()
+    percentage_of_none = predicted_none / len(test_set_y)
+    return print(f"for threshold {threshold}\nprecision for zero is {round(precision_zero, 3)} and recall for zero is {round(recall_zero, 3)} \nprecision for one is {round(precision_one, 3)} and recall for one is {round(recall_one, 3)}\npercentage of none is {round(percentage_of_none, 3)}\nnumber of zero predictions{predicted_zero}\nnumber of predicted one {predicted_one}\n\n")
+
+
+for i in range(50, 60, 1):
+    metrics_for_both_classes(voting_clf, test_set_x=X_test_fair_pca, test_set_y=y_test_fair, threshold= i / 100)
+
+#we see that the voting_clf model is vary bias towards predicting the zero class (thats because of the big inbalance in the training set)
+ 
+        
+
+
+print(f"we have: precision{precision_score(y_test_fair, model_gen_test(model = top_mod_RFC , test_set=X_test_fair_pca, threshold=0.55))},recall {recall_score(y_test_fair, model_gen_test(model = top_mod_RFC , test_set=X_test_fair_pca, threshold=0.55))},f1 {f1_score(y_test_fair, model_gen_test(model = top_mod_RFC , test_set=X_test_fair_pca, threshold=0.55))}")
 
 def final_predictor_negative(test_set):
     final_predictions = []
