@@ -359,8 +359,12 @@ df5['weight_class'].value_counts()
 df5.drop(['gender', 'B_Weight_lbs', 'R_Weight_lbs'], axis=1, inplace=True)
 y = df5['Winner']
 x = df5.drop(['Winner'], axis=1)
+(y == "Red").sum() / (y == "Blue").sum()
 from sklearn.model_selection import train_test_split
-X_train, X_test, y_train, y_test = train_test_split(x, y, stratify=x['weight_class'], test_size=0.2, shuffle=True)
+X_train, X_test, y_train, y_test = train_test_split(x, y, stratify=y, test_size=0.2, shuffle=True)
+(y_train == "Red").sum() / (y_train == "Blue").sum()
+(y_test == "Red").sum() / (y_test == "Blue").sum()
+
 df5['weight_class'].value_counts() / df5.shape[0]
 X_train['weight_class'].value_counts() / X_train.shape[0]
 X_test['weight_class'].value_counts() / X_test.shape[0]
@@ -741,8 +745,10 @@ X_test_num_scaled = pd.DataFrame(X_test_num_scaled_values, columns=std_scaler.ge
 for column in X_train_num_scaled.columns:
     X_train_num_scaled[column].hist(legend=True)
     plt.show()
-
-
+'''
+X_train_num_scaled.to_csv('X_train_num_scaled.csv', index=False)
+X_test_num_scaled.to_csv('X_test_num_scaled.csv', index=False)
+'''
 from sklearn.decomposition import PCA
 pca = PCA(n_components=0.95)
 X_train_num_scaled_pca_values = pca.fit_transform(X_train_num_scaled)
@@ -765,77 +771,20 @@ for column in X_train_num_scaled_pca.columns:
 
 X_train_concat = pd.concat([X_train_num_scaled_pca, X_train_cat_en], axis=1)
 X_test_concat = pd.concat([X_test_num_scaled_pca, X_test_cat_en], axis=1)
+'''
+X_train_concat.to_csv('X_train_concat.csv', index=False)
+X_test_concat.to_csv('X_test_concat.csv', index=False)
+y_train.to_csv('y_train.csv', index=False)
+y_test.to_csv('y_test.csv', index=False)
+datasets that are stratified based on weight class
+'''
+'''
+X_train_concat.to_csv('X_train_concat_branch.csv', index=False)
+X_test_concat.to_csv('X_test_concat_branch.csv', index=False)
+y_train.to_csv('y_train_branch.csv', index=False)
+y_test.to_csv('y_test_branch.csv', index=False)
+datasets that are stratified based on y
 
-
-X_train_final = X_train_concat[:3500]
-X_valid_final = X_train_concat[3500:]
-X_test_final = X_test_concat.copy()
-
-y_train_final = y_train[:3500]
-y_valid_final = y_train[3500:]
-y_test_final = y_test.copy()
-
-import tensorflow as tf
-
-n_units = 300
-activation = tf.keras.activations.gelu
-initializer = tf.keras.initializers.he_normal()
-model = tf.keras.Sequential([
-    tf.keras.layers.Input(shape=X_train_final.shape[1:]),
-    tf.keras.layers.BatchNormalization(),
-    tf.keras.layers.Dense(n_units, activation= activation, kernel_initializer=initializer),
-    tf.keras.layers.BatchNormalization(),
-    tf.keras.layers.Dense(n_units, activation= activation, kernel_initializer=initializer),
-    tf.keras.layers.BatchNormalization(),
-    tf.keras.layers.Dense(n_units, activation= activation, kernel_initializer=initializer),
-    tf.keras.layers.BatchNormalization(),
-    tf.keras.layers.Dense(n_units, activation= activation, kernel_initializer=initializer),
-    tf.keras.layers.Dropout(rate=0.3),
-    tf.keras.layers.BatchNormalization(),
-    tf.keras.layers.Dense(n_units, activation= activation, kernel_initializer=initializer),
-    tf.keras.layers.Dropout(rate=0.3),
-    tf.keras.layers.BatchNormalization(),
-    tf.keras.layers.Dense(n_units, activation= activation, kernel_initializer=initializer),
-    tf.keras.layers.Dropout(rate=0.3),
-    tf.keras.layers.BatchNormalization(),
-    tf.keras.layers.Dense(n_units, activation= activation, kernel_initializer=initializer),
-    tf.keras.layers.Dropout(rate=0.3),
-    tf.keras.layers.BatchNormalization(),
-    tf.keras.layers.Dense(n_units, activation= activation, kernel_initializer=initializer),
-    tf.keras.layers.Dropout(rate=0.3),
-    tf.keras.layers.BatchNormalization(),
-    tf.keras.layers.Dense(n_units, activation= activation, kernel_initializer=initializer),
-    tf.keras.layers.Dropout(rate=0.3),
-    tf.keras.layers.BatchNormalization(),
-    tf.keras.layers.Dense(1, activation='sigmoid')
-])
-
-optimizer = tf.keras.optimizers.Nadam(learning_rate=0.05)
-
-lr_schedule = tf.keras.callbacks.ReduceLROnPlateau(monitor='val_accuracy',factor=0.2, patience=3)
-
-callback = tf.keras.callbacks.EarlyStopping(monitor='val_accuracy' ,patience=10, restore_best_weights=True)
-
-model.compile(loss='binary_crossentropy', optimizer=optimizer, metrics=['accuracy'])
-#we should put a higher weight in the underpressented class (1 in this case)
-weight_minoniry_class = (y_train_final == 0).sum() / (y_train_final == 1).sum()
-
-history = model.fit(X_train_final, y_train_final, epochs=100, validation_data=(X_valid_final, y_valid_final), batch_size=32, callbacks=[lr_schedule, callback], class_weight= {0:1, 1:weight_minoniry_class})
-
-model.evaluate(x=X_test_final, y=y_test_final)
-#59%
-pd.DataFrame(history.history)[["accuracy", "val_accuracy"]].plot(figsize=(8, 5))
-
-#monte_carlo
-y_probas = np.stack([model(X_test_final, training=True) for sample in range(100)])
-y_proba = y_probas.mean(axis=0)
-y_proba
-monte_carlo_pred = []
-for i in y_proba:
-    if i > 0.5:
-        monte_carlo_pred.append(1)
-    if i < 0.5:
-        monte_carlo_pred.append(0)
-    
-(monte_carlo_pred == y_test_final).sum() / len(y_test_final)
-
+X_train_num_scaled.to_csv('X_train_num_scaled_branch.csv', index=False)
+X_test_num_scaled.to_csv('X_test_num_scaled_branch.csv', index=False)
+'''
