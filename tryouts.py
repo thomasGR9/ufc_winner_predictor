@@ -20,8 +20,11 @@ from sklearn.metrics import precision_recall_curve
 import matplotlib.pyplot as plt
 from sklearn.model_selection import cross_val_predict
 from sklearn.ensemble import BaggingClassifier
+from sklearn.mixture import BayesianGaussianMixture
+from sklearn.mixture import GaussianMixture
+import random
 
-dataset_choice = "same_y_ratios" #Choose between "same_weight_class_ratios" or "same_y_ratios"
+dataset_choice = "same_weight_class_ratios" #Choose between "same_weight_class_ratios" or "same_y_ratios"
 
 def training_test_sets(dataset_ch):
     if dataset_ch == "same_weight_class_ratios":
@@ -35,6 +38,7 @@ def training_test_sets(dataset_ch):
         
         y_test_fair_full = y_test_same_weight_class_ratios.copy()
         X_test_fair_full = X_test_full_same_weight_class_ratios.copy()
+        X_test_fair_without_pca_full = X_test_without_pca_full_same_weight_class_ratios.copy()
 
         for index in y_test_fair_full.index:
             ratio = ((y_test_fair_full == 1).sum() / (y_test_fair_full == 0).sum())[0]
@@ -42,7 +46,8 @@ def training_test_sets(dataset_ch):
                 if (y_test_fair_full.loc[index].values[0] == 0):
                     y_test_fair_full.drop(index, inplace=True)
                     X_test_fair_full.drop(index, inplace=True)
-            
+                    X_test_fair_without_pca_full.drop(index, inplace=True)
+                    
         y_test_full = y_test_same_weight_class_ratios.copy()
         X_test_full = X_test_full_same_weight_class_ratios.copy()
         y_train_full = y_train_same_weight_class_ratios.copy()
@@ -62,6 +67,7 @@ def training_test_sets(dataset_ch):
         
         y_test_fair_full = y_test_same_y_ratios.copy()
         X_test_fair_full = X_test_full_same_y_ratios.copy()
+        X_test_fair_without_pca_full = X_test_without_pca_full_same_y_ratios.copy()
 
         for index in y_test_fair_full.index:
             ratio = ((y_test_fair_full == 1).sum() / (y_test_fair_full == 0).sum())[0]
@@ -69,6 +75,8 @@ def training_test_sets(dataset_ch):
                 if (y_test_fair_full.loc[index].values[0] == 0):
                     y_test_fair_full.drop(index, inplace=True)
                     X_test_fair_full.drop(index, inplace=True)
+                    X_test_fair_without_pca_full.drop(index, inplace=True)
+                    
         y_test_full = y_test_same_y_ratios.copy()
         X_test_full = X_test_full_same_y_ratios.copy()
         y_train_full = y_train_same_y_ratios.copy()
@@ -76,10 +84,18 @@ def training_test_sets(dataset_ch):
 
         X_train_without_pca_full = X_train_without_pca_full_same_y_ratios.copy()
         X_test_without_pca_full = X_test_without_pca_full_same_y_ratios.copy()
-    return y_test_full, X_test_full, y_train_full, X_train_full, X_train_without_pca_full, X_test_without_pca_full, X_test_fair_full, y_test_fair_full
+    return y_test_full, X_test_full, y_train_full, X_train_full, X_train_without_pca_full, X_test_without_pca_full, X_test_fair_full, X_test_fair_without_pca_full, y_test_fair_full
 
 
-y_test_full, X_test_full, y_train_full, X_train_full, X_train_without_pca_full, X_test_without_pca_full, X_test_fair_full, y_test_fair_full = training_test_sets(dataset_choice)
+y_test_full, X_test_full, y_train_full, X_train_full, X_train_without_pca_full, X_test_without_pca_full, X_test_fair_full, X_test_fair_without_pca_full, y_test_fair_full = training_test_sets(dataset_choice)
+#Note on how to combat the zero biased predictions
+#1st way is to oversample the one class by some made up data based on the distribution of the class
+#2nd way is to use the pre-pca dataset and change the values of the features of some data such that B --> R , R --> B.The diff columns will be equal to (-1)*diff_column.Then for that data we will swamp the zero target to one until we got equal amounts of each in the training set.
+#This can be done because it shouldn't matter what corner the winner happened to be placed.
+#It could also help to put more weight on predictions of class one on the hyperparameter search part.
+
+
+
 
 
 #X with pca and cat
@@ -103,10 +119,149 @@ y_train_final = y_train_full[:3500].select_dtypes(np.float64)['Winner']
 y_valid_final = y_train_full[3500:].select_dtypes(np.float64)['Winner']
 y_test_final = y_test_full.copy()['Winner']
 
-
-
+#1st lets try the 2nd approach 
 (y_train_full == 1).sum() / (y_train_full == 0).sum()
 (y_test_full == 1).sum() / (y_test_full == 0).sum()
+#so we must change N data point from 0 to 1 where N is
+N = ((y_train_full == 0).sum() - (y_train_full == 1).sum()) / 2
+X_train_pca_full_winner_zero = X_train_pca_full.copy()
+indexes = []
+for index in y_train_full.index:
+    if y_train_full.iloc[index, 0] == 0:
+        indexes.append(index)
+X_train_pca_full_winner_zero = X_train_pca_full_winner_zero.iloc[indexes]
+X_train_pca_full_winner_zero
+#training set with only winners = 0
+
+#i will use GaussianMixtures to cluster the zero winners training set.
+bmg = BayesianGaussianMixture(n_components=20, n_init=10, random_state=42)
+bmg.fit(X_train_pca_full)
+bmg.weights_.round(2)
+
+
+bic_score = []
+aic_score = []
+
+for i in range(1, 20, 1):
+    gm = GaussianMixture(n_components=i, n_init=10)
+    gm.fit(X_train_pca_full_winner_zero)
+    bic_score.append(gm.bic(X_train_pca_full_winner_zero).round(2))
+    aic_score.append(gm.aic(X_train_pca_full_winner_zero).round(2))
+    
+bic_score
+aic_score
+#it seems that the 10 clusters give the best result
+gm = GaussianMixture(n_components=10, n_init=10)
+gm.fit(X_train_pca_full_winner_zero)
+weights = []
+for i in range(len(gm.weights_)):
+    weights.append(gm.weights_[i])
+    
+weights
+
+
+#i will try to change some winners 0 --> 1 in a way that keeps the same ratios in the fitted clusters.
+insances_per_cluster = []
+for i in range(len(weights)):
+    insances_per_cluster.append(int(N * weights[i]))
+
+insances_per_cluster
+#how many instances i should change from each cluster
+
+gaus_preds = gm.predict(X_train_pca_full_winner_zero)
+
+
+gaus_preds_list = gaus_preds.tolist()
+[i for i, n in enumerate(gaus_preds_list) if n == 0]
+#this returns a list of all the indexes of the instances that are in cluster 0
+
+indexes_from_clusters = []
+
+for cluster in range(10):
+    indexes_from_clusters.append(random.choices([i for i, n in enumerate(gaus_preds_list) if n == cluster], k=insances_per_cluster[cluster]))
+
+indexes_from_clusters[0]
+#is a list of lists.List n has (instances per cluster[n]) number of instances (indexes) picked randomly from cluster n
+
+original_intexes_from_clusters = []
+for cluster in range(10):
+    original_intexes_from_clusters.append(X_train_pca_full_winner_zero.reset_index().iloc[indexes_from_clusters[cluster]]['index'].tolist())
+
+X_train_pca_full_winner_zero.reset_index().iloc[indexes_from_clusters[0]]['index'].tolist()
+
+original_intexes_from_clusters  
+#the same list of lists but with the original indexes of the dataset
+#these are the indexes of the datapoints that we will change from 0 --> 1. That way the ratios of points in each cluster of the fitted gaussian mixtures will remain the same.
+intexes_for_change = []
+for i in range(10):
+    intexes_for_change = intexes_for_change + original_intexes_from_clusters[i] 
+#all lists in one
+len(intexes_for_change)
+
+
+intexes_for_change_no_dublicates = [] 
+duplist = [] 
+for i in intexes_for_change:
+    if i not in intexes_for_change_no_dublicates:
+        intexes_for_change_no_dublicates.append(i)
+    else:
+        duplist.append(i)
+
+len(intexes_for_change_no_dublicates)
+(len(duplist) / len(intexes_for_change)) * 100
+#only 4.6% of the indexes are duplicates, that shouldn't be a problem
+len(intexes_for_change_no_dublicates)
+#this is the intexes_for_change list but without dublicates
+
+intexes_for_change_no_dublicates.sort()
+intexes_for_change_no_dublicates
+#sorted indexes
+
+X_train_without_pca_full.iloc[intexes_for_change_no_dublicates]
+#these instances will be changed from 0 --> 1
+for i in intexes_for_change_no_dublicates:
+    if y_train_full.iloc[i, 0] == 1:
+        print("problemo")
+
+
+X_train_for_change = X_train_without_pca_full.copy()
+X_train_for_change = X_train_for_change.iloc[intexes_for_change_no_dublicates]
+X_train_for_change
+cols_for_B = ['B_avg_SIG_STR_pct', 'B_avg_TD_pct', 'B_win_by_Decision_Split', 'B_Height_cms', 'B_Reach_cms', 'B_age', 'sqrt_B_avg_SIG_STR_landed', 'sqrt_B_avg_TD_landed', 'sqrt_B_longest_win_streak', 'sqrt_B_total_rounds_fought', 'sqrt_B_wins', 'cbrt_B_current_win_streak', 'cbrt_B_avg_SUB_ATT', 'cbrt_B_losses']
+cols_for_R = ['R_avg_SIG_STR_pct', 'R_avg_TD_pct', 'R_win_by_Decision_Split', 'R_Height_cms', 'R_Reach_cms', 'R_age', 'sqrt_R_avg_SIG_STR_landed', 'sqrt_R_avg_TD_landed', 'sqrt_R_longest_win_streak', 'sqrt_R_total_rounds_fought', 'sqrt_R_wins', 'cbrt_R_current_win_streak', 'cbrt_R_avg_SUB_ATT', 'cbrt_R_losses']
+diff_cols = ['win_streak_dif', 'longest_win_streak_dif', 'win_dif', 'loss_dif', 'total_round_dif', 'ko_dif', 'sub_dif', 'height_dif', 'reach_dif', 'age_dif', 'sig_str_dif', 'avg_sub_att_dif', 'avg_td_dif', 'Rank_dif']
+
+dict_B_to_R = {}
+for i in range(len(cols_for_B)):
+    dict_B_to_R[cols_for_B[i]] = cols_for_R[i]
+dict_B_to_R
+
+dict_R_to_B = {}
+for i in range(len(cols_for_B)):
+    dict_R_to_B[cols_for_R[i]] = cols_for_B[i]
+dict_R_to_B
+
+
+X_train_for_change_B = X_train_for_change[cols_for_B]
+X_train_for_change_B.rename(columns=dict_B_to_R, inplace=True)
+X_train_for_change_B
+
+X_train_for_change_R = X_train_for_change[cols_for_R]
+X_train_for_change_R.rename(columns=dict_R_to_B, inplace=True)
+X_train_for_change_R
+
+X_train_for_change_diff = X_train_for_change[diff_cols]
+X_train_for_change_diff = -X_train_for_change_diff
+X_train_for_change_diff
+
+y_train_for_change = y_train_full.copy()
+y_train_for_change = y_train_for_change.iloc[intexes_for_change_no_dublicates]
+y_train_for_change['Winner'] = 1.0
+y_train_for_change
+
+X_train_changed = pd.concat([X_train_for_change_B, X_train_for_change_R, X_train_for_change_diff], axis=1)
+#the above code will rename all the B columns to R, all the R columns to B, will multiply all the diff columns by (-1) on the X train dataset and change the winner from 0 --> 1 on the y train dataset only on the picked for change instances
+
 
 weight_minoniry_class_full = (y_train_full == 0).sum() / (y_train_full == 1).sum()
 
