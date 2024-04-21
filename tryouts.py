@@ -23,6 +23,7 @@ from sklearn.ensemble import BaggingClassifier
 from sklearn.mixture import BayesianGaussianMixture
 from sklearn.mixture import GaussianMixture
 import random
+from sklearn.decomposition import PCA
 
 dataset_choice = "same_weight_class_ratios" #Choose between "same_weight_class_ratios" or "same_y_ratios"
 
@@ -85,11 +86,12 @@ def training_test_sets(dataset_ch):
         X_train_without_pca_full = X_train_without_pca_full_same_y_ratios.copy()
         X_test_without_pca_full = X_test_without_pca_full_same_y_ratios.copy()
     return y_test_full, X_test_full, y_train_full, X_train_full, X_train_without_pca_full, X_test_without_pca_full, X_test_fair_full, X_test_fair_without_pca_full, y_test_fair_full
-
+#function to easily choose between the two different kind of datasets we have.
 
 y_test_full, X_test_full, y_train_full, X_train_full, X_train_without_pca_full, X_test_without_pca_full, X_test_fair_full, X_test_fair_without_pca_full, y_test_fair_full = training_test_sets(dataset_choice)
+
 #Note on how to combat the zero biased predictions
-#1st way is to oversample the one class by some made up data based on the distribution of the class
+#1st way is to oversample the one class by some made up data based on the distribution of the class (SMOTE?)
 #2nd way is to use the pre-pca dataset and change the values of the features of some data such that B --> R , R --> B.The diff columns will be equal to (-1)*diff_column.Then for that data we will swamp the zero target to one until we got equal amounts of each in the training set.
 #This can be done because it shouldn't matter what corner the winner happened to be placed.
 #It could also help to put more weight on predictions of class one on the hyperparameter search part.
@@ -119,6 +121,7 @@ y_train_final = y_train_full[:3500].select_dtypes(np.float64)['Winner']
 y_valid_final = y_train_full[3500:].select_dtypes(np.float64)['Winner']
 y_test_final = y_test_full.copy()['Winner']
 
+
 #1st lets try the 2nd approach 
 (y_train_full == 1).sum() / (y_train_full == 0).sum()
 (y_test_full == 1).sum() / (y_test_full == 0).sum()
@@ -132,7 +135,7 @@ for index in y_train_full.index:
 X_train_pca_full_winner_zero = X_train_pca_full_winner_zero.iloc[indexes]
 X_train_pca_full_winner_zero
 #training set with only winners = 0
-
+'''
 #i will use GaussianMixtures to cluster the zero winners training set.
 bmg = BayesianGaussianMixture(n_components=20, n_init=10, random_state=42)
 bmg.fit(X_train_pca_full)
@@ -151,6 +154,7 @@ for i in range(1, 20, 1):
 bic_score
 aic_score
 #it seems that the 10 clusters give the best result
+'''
 gm = GaussianMixture(n_components=10, n_init=10)
 gm.fit(X_train_pca_full_winner_zero)
 weights = []
@@ -245,23 +249,67 @@ dict_R_to_B
 X_train_for_change_B = X_train_for_change[cols_for_B]
 X_train_for_change_B.rename(columns=dict_B_to_R, inplace=True)
 X_train_for_change_B
+#will rename the columns cols_for_B of the dataset to the corresponding cols_for_R columns
 
 X_train_for_change_R = X_train_for_change[cols_for_R]
 X_train_for_change_R.rename(columns=dict_R_to_B, inplace=True)
 X_train_for_change_R
+#the same but for R --> B
 
 X_train_for_change_diff = X_train_for_change[diff_cols]
 X_train_for_change_diff = -X_train_for_change_diff
 X_train_for_change_diff
+#Will multiply the diff_cols by (-1).This is because we made the diff cols as the blue corner - red corner values.Now that we want to reverse them we should multiply them by (-1)
 
 y_train_for_change = y_train_full.copy()
 y_train_for_change = y_train_for_change.iloc[intexes_for_change_no_dublicates]
 y_train_for_change['Winner'] = 1.0
 y_train_for_change
+#changing all these instance's winners from 0 to 1
 
 X_train_changed = pd.concat([X_train_for_change_B, X_train_for_change_R, X_train_for_change_diff], axis=1)
-#the above code will rename all the B columns to R, all the R columns to B, will multiply all the diff columns by (-1) on the X train dataset and change the winner from 0 --> 1 on the y train dataset only on the picked for change instances
+#merge all the changed datasets to a final changed dataset with all the features
 
+X_train_without_pca_full_dropped = X_train_without_pca_full.copy()
+X_train_without_pca_full_dropped.drop(intexes_for_change_no_dublicates, inplace=True)
+X_train_without_pca_full_dropped.index
+
+X_train_without_pca_full_changed = pd.concat([X_train_changed, X_train_without_pca_full_dropped]) 
+X_train_without_pca_full_changed.index
+
+y_train_full_dropped = y_train_full.copy()
+y_train_full_dropped.drop(intexes_for_change_no_dublicates, inplace=True)
+y_train_full_changed = pd.concat([y_train_for_change, y_train_full_dropped]) 
+(y_train_full_changed == 0).sum() / (y_train_full_changed == 1).sum()
+#drop the instances we marked from the original dataset and merge them with the same instances changed
+
+ind_list=[i for i in range(len(y_train_full_changed))]
+random.shuffle(ind_list)
+ind_list
+y_train_full_changed = y_train_full_changed.iloc[ind_list].reset_index(drop=True)
+X_train_without_pca_full_changed = X_train_without_pca_full_changed.iloc[ind_list].reset_index(drop=True)
+#shuffle the instances
+
+
+pca = PCA(n_components=23)
+X_train_pca_full_changed_values = pca.fit_transform(X_train_without_pca_full_changed)
+X_train_pca_full_changed_values
+pca.explained_variance_ratio_.sum()
+#0.95
+
+
+X_train_pca_full_changed = pd.DataFrame(X_train_pca_full_changed_values, columns=pca.get_feature_names_out(), index=X_train_without_pca_full_changed.index)
+
+X_test_without_pca_full = X_test_without_pca_full[X_train_without_pca_full_changed.columns]
+#changing the order of the features to be the same as the fitted pca's dataset
+X_test_pca_full_changed_values = pca.transform(X_test_without_pca_full)
+X_test_pca_full_changed = pd.DataFrame(X_test_pca_full_changed_values, columns=pca.get_feature_names_out(), index=X_test_without_pca_full.index)
+#Doing pca in the training and test set, n components equal to 23 to fit our trained NN 
+X_train_pca_full_changed.to_csv('X_train_pca_full_changed.csv', index=False)
+X_test_pca_full_changed.to_csv('X_test_pca_full_changed.csv', index=False)
+y_train_full_changed.to_csv('y_train_full_changed.csv', index=False)
+#Saving the datasets
+(y_train_full_changed == 0).sum() / (y_train_full_changed == 1).sum()
 
 weight_minoniry_class_full = (y_train_full == 0).sum() / (y_train_full == 1).sum()
 
@@ -367,9 +415,9 @@ for n_est in possible_n_est:
         train_acc = (rnf_clf.predict(X_train_pca) == y_train_final).sum() / X_train_pca.shape[0]
         test_acc = (rnf_clf.predict(X_test_pca) == y_test_final).sum() / X_test_pca.shape[0]
         print(f"For n_est:{n_est} and max_depth:{max_depth} we have train_acc:{train_acc} and test_acc{test_acc}")
-#the best test accuracy is  59.59% for n_est:400 and max_depth:6, so we are gonna narrow our bayesian hyperparameter search around that number
+#the best test accuracy is  59.59% for n_est:400 and max_depth:6, so we are gonna narrow our bayesian hyperparameter search around those numbers
 
-#we will rerun the optimization phase now with the same y ratios dataset and with the optimization metric to be the mean of the precisions of 0 and 1 classes
+#we will rerun the optimization phase now with the same weight class ratios dataset and with the optimization metric to be the mean of the precisions of 0 and 1 classes
 
 def optimize_RFC(params, param_names, x, y):
     params= dict(zip(param_names, params))
@@ -385,7 +433,7 @@ def optimize_RFC(params, param_names, x, y):
         ytest = y.loc[test_idx]
         
         weight_minoniry = (ytrain == 0).sum() / (ytrain == 1).sum()
-        model = RandomForestClassifier(**params, class_weight={0:1 , 1:weight_minoniry})
+        model = RandomForestClassifier(**params)
         model.fit(xtrain, ytrain)
         preds = model.predict(xtest)
         predicted_zero = 0
@@ -404,6 +452,11 @@ def optimize_RFC(params, param_names, x, y):
                 predicted_one = predicted_one + 1
                 if winner_one[i]:
                     correct_one = correct_one + 1
+        if predicted_zero == 0:
+            predicted_zero = 1
+        if predicted_one == 0:
+            predicted_one = 1
+        #avoid division by zero
         precision_zero = correct_zero / predicted_zero
         precision_one = correct_one / predicted_one
         avg_prec = (precision_one + precision_zero) / 2
@@ -430,8 +483,8 @@ param_names_RFC = [
 optimization_function_RFC = partial(
     optimize_RFC,
     param_names = param_names_RFC,
-    x = X_train_pca_full,
-    y = y_train_full
+    x = X_train_pca_full_changed,
+    y = y_train_full_changed
 )
 
 result_RFC =  gp_minimize(
@@ -443,17 +496,13 @@ result_RFC =  gp_minimize(
 print(
     dict(zip(param_names_RFC, result_RFC.x))
 )
-#for the same_y_ratios dataset
+#for the same_weight_class_ratios and balanced dataset
+#{'max_depth': 13, 'n_estimators': 673, 'criterion': 'gini', 'max_features': 0.9901292474497067}
 #{'max_depth': 15, 'n_estimators': 334, 'criterion': 'entropy', 'max_features': 0.01115001788516646}
 
 
 
-top_mod_RFC = RandomForestClassifier(n_estimators=334, max_depth=15, random_state=42, class_weight={0:1 , 1:weight_minoniry_class_full}, criterion='entropy', max_features=0.01115001788516646)
-
-
-#Its time to choose the right balance between precision and recall.I believe that the metric that i should give the most of the weight is precision.
-#I look at it as a gambler's view.Its way more important that you are more certain about the correct winner than finding the most correct winners, if you are gonna bet for the winner.
-#we will look for over 10% recall.That means for every ufc card (about 15 fights) it will surely give us one positive class
+top_mod_RFC = RandomForestClassifier(n_estimators=673, max_depth=13, random_state=42, criterion='gini', max_features=0.9901292474497067)
 
 
 
@@ -462,6 +511,9 @@ top_mod_RFC = RandomForestClassifier(n_estimators=334, max_depth=15, random_stat
 
 
 
+
+
+#bayesian hyperparameter search for a GradientBoostingClassifier
 
 def optimize_GBC(params, param_names, x, y):
     params= dict(zip(param_names, params))
@@ -508,9 +560,9 @@ def optimize_GBC(params, param_names, x, y):
     return -1.0 * np.mean(presicions)
 
 param_space_GBC = [
-    space.Integer(2, 10, name="max_depth"),
-    space.Real(0.8, 1, prior="uniform" ,name="subsample"),
-    space.Real(0.01, 1, prior="uniform" ,name="learning_rate")
+    space.Integer(1, 10, name="max_depth"),
+    space.Real(0.4, 1, prior="uniform" ,name="subsample"),
+    space.Real(0.001, 1, prior="uniform" ,name="learning_rate")
 ]
 param_names_GBC = [
     "max_depth",
@@ -521,14 +573,15 @@ param_names_GBC = [
 optimization_function_GBC = partial(
     optimize_GBC,
     param_names = param_names_GBC,
-    x = X_train_pca_full,
-    y = y_train_full
+    x = X_train_pca_full_changed,
+    y = y_train_full_changed
 )
 
 result_GBC =  gp_minimize(
     optimization_function_GBC,
     dimensions = param_space_GBC,
-    verbose=10 
+    verbose=10,
+    n_calls=50
 )
 
 print(
@@ -536,8 +589,9 @@ print(
 )
 #for the same_y_ratios dataset
 #{'max_depth': 2, 'subsample': 0.8, 'learning_rate': 0.01}
-
-top_mod_GBC = GradientBoostingClassifier(n_estimators=500, n_iter_no_change=10, max_depth=2, subsample=0.8, learning_rate=0.01)
+#for the same_weight_class_ratios balanced dataset
+#{'max_depth': 1, 'subsample': 1.0, 'learning_rate': 0.021677020921780407}
+top_mod_GBC = GradientBoostingClassifier(n_estimators=500, n_iter_no_change=10, max_depth=1, subsample=1, learning_rate=0.021677020921780407)
 
 def optimize_SVC(params, param_names, x, y):
     params= dict(zip(param_names, params))
@@ -588,6 +642,7 @@ print(
 top_mod_SVC = BaggingClassifier(SVC(kernel='rbf', probability=True, class_weight={0:1 , 1:weight_minoniry_class}, C=256.6619199677021, gamma=0.11674269193229327), n_estimators=500, max_samples=100)
 
 
+#bayesian hyperparameter search for a AdaBoostClassifier of DecisionTreeClassifier
 def optimize_ABC(params, param_names, x, y):
     params= dict(zip(param_names, params))
     model = AdaBoostClassifier(DecisionTreeClassifier(max_depth=2), **params)
@@ -630,7 +685,7 @@ def optimize_ABC(params, param_names, x, y):
     return -1.0 * np.mean(presicions)
 
 param_space_ABC = [
-    space.Integer(20, 40, name="n_estimators"),
+    space.Integer(20, 100, name="n_estimators"),
     space.Real(0.01, 0.8, prior="uniform" ,name="learning_rate")
 ]
 param_names_ABC = [
@@ -641,30 +696,40 @@ param_names_ABC = [
 optimization_function_ABC = partial(
     optimize_ABC,
     param_names = param_names_ABC,
-    x = X_train_pca_full,
-    y = y_train_full
+    x = X_train_pca_full_changed,
+    y = y_train_full_changed
 )
 
 result_ABC =  gp_minimize(
     optimization_function_ABC,
     dimensions = param_space_ABC,
-    verbose=10 
+    verbose=10,
+    n_calls=50
 )
 
 print(
     dict(zip(param_names_ABC, result_ABC.x))
 )
 #{'n_estimators': 34, 'learning_rate': 0.10781322577235282}
-top_mod_ABC = AdaBoostClassifier(DecisionTreeClassifier(max_depth=2), n_estimators=34, learning_rate=0.10781322577235282)
+#for the same_weight_class_ratios balanced dataset
+#{'n_estimators': 55, 'learning_rate': 0.7013603138363024}
+top_mod_ABC = AdaBoostClassifier(DecisionTreeClassifier(max_depth=2), n_estimators=55, learning_rate=0.7013603138363024)
 
 estimators = [
     ('GBC', top_mod_GBC),
     ('ABC', top_mod_ABC),
 ]
 
-voting_clf = VotingClassifier(estimators=estimators, voting='soft')
+voting_clf = VotingClassifier(estimators=estimators, voting='soft', weights=)
 
 
+#Our classifiers will predict that the class is one if the probabilities it gives for that class is over the number threshold
+#Will predict that the class is zero if the probabilities it gives for the class one is under the number 1 - threshold
+#Else it will not give a prediction of the class (appends it as -1)
+#We configure the classifiers that way because it enables to pick a threshold that gives high accuracy for both classes
+
+
+#This function will return a list of predictions by the model on the test_set_x
 def model_gen_test(model, test_set, threshold, samples=None):
     if model == top_mod_NN:
         #monte carlo method
@@ -686,8 +751,7 @@ def model_gen_test(model, test_set, threshold, samples=None):
 
 
 
-
-
+#This function will return the classification metrics for both classes (plus a percentage of nonclassified instances)
 def metrics_for_both_classes(model, test_set_x, test_set_y, threshold, samples=None):
     preds_test = model_gen_test(model = model, test_set = test_set_x, threshold = threshold, samples=samples)
     predicted_zero = 0
@@ -723,10 +787,10 @@ def metrics_for_both_classes(model, test_set_x, test_set_y, threshold, samples=N
 
 
 
-#this function will print the average classification scores of a model on 3 different test sets (who have equal number of negative and positive classes).The model is fitted on a different training set (would be x - test set) that 3 times 
+#this function will print the average classification scores of a model on 10 different test sets (who have equal number of negative and positive classes).The model is fitted on a different training set (would be x - test set) that 10 times 
 def probas_stratify_kfolds(model, x, y, threshold, samples=None):
     model = model
-    kf = StratifiedKFold(n_splits=3)
+    kf = StratifiedKFold(n_splits=10)
     recalls_one = []
     precisions_one = []
     recalls_zero = []
@@ -765,15 +829,34 @@ def probas_stratify_kfolds(model, x, y, threshold, samples=None):
     avg_none = sum(avg_nones) / len(avg_nones)
     return print(f"for threshold {threshold}\nprecision for zero is {round(avg_prec_zero, 3)} and recall for zero is {round(avg_rec_zero, 3)} \nprecision for one is {round(avg_prec_one, 3)} and recall for one is {round(avg_rec_one, 3)}\npercentage of none is {100 * round(avg_none, 3)}%\naverage precision for both classes is {round(avg_prec_both, 3)}\naverage recall for both classes is {round(avg_rec_both, 3)}\n\n")
 
+#Its time to choose the right balance between precision and recall.I believe that the metric that i should give the most of the weight is precision (the average precision of the two classes)
+#I look at it as a gambler's view.Its way more important that you are more certain about the correct winner than finding the most correct winners, if you are gonna bet for the winner.
+#we will look for over 10% recall.That means for every ufc card (about 15 fights) it will surely give a confident answer
 
-probas_stratify_kfolds(top_mod_RFC, x=X_train_pca_full, y=y_train_full, threshold=0.5)
-for i in range(50, 60, 1):
-    probas_stratify_kfolds(top_mod_NN, x=X_train_pca_full, y=y_train_full, threshold=i / 100 ,samples=2)
+#The way to adjust the precision-recall balance is via the threshold value (and the samples for the monte carlo method on the NN).It only makes sense to take values over 0.5 (because the prediction for zero is when this value is under 1 - threshold)
+for i in range(55, 59, 1):
+    probas_stratify_kfolds(top_mod_RFC, x=X_train_pca_full_changed, y=y_train_full_changed, threshold=i / 100)
 
-probas_stratify_kfolds(top_mod_NN, x=X_train_pca_full, y=y_train_full, threshold= 0.65 ,samples=2)
+'''
+for threshold 0.58
+precision for zero is 0.544 and recall for zero is 0.126 
+precision for one is 0.597 and recall for one is 0.114
+percentage of none is 78.5%
+average precision for both classes is 0.57
+average recall for both classes is 0.12
+'''
 
+for i in range(50, 53, 1):
+    probas_stratify_kfolds(voting_clf, x=X_train_pca_full_changed, y=y_train_full_changed, threshold = i / 100)
 
+for i in range(50, 70, 1):
+    for j in range(1, 20, 1):
+        probas_stratify_kfolds(top_mod_NN, x=X_train_pca_full_changed, y=y_train_full_changed, threshold = i / 100, samples=j)
+#
 
+#Lastly we will combine all the previous classifiers into one that does hard voting
+
+#Just as model_get_test but will append the class 0 predictions as -1 and the non-confident instances as 0.This is important to implement the hard voter
 def model_gen_test_for_hard_voter(model, test_set, threshold, samples=None):
     if model == top_mod_NN:
         #monte carlo method
@@ -793,6 +876,12 @@ def model_gen_test_for_hard_voter(model, test_set, threshold, samples=None):
             thres_preds.append(0)
     return(thres_preds)
 
+#This function will consider the predictions of our 3 models.It will return the list of the final predictions based on this set of logic
+#If all 3 classifiers predict the same class it will append this class
+#If 2 classifiers predict the same class and the 3rd is not confident enough it will still append this class
+#If 2 classifiers predict the same class and the 3rd predicts the other it will append (-1) etc non-prediction
+#If 1 classifier predict one class and the other 2 are not confident enough it will append non-prediction
+#If none classifier is confident enough it will append non-prediction
 def hard_voter(test_set):
     RFC_preds = model_gen_test_for_hard_voter(model=top_mod_RFC, test_set=test_set, threshold=50 )
     voting_preds = model_gen_test_for_hard_voter(model=voting_clf, test_set=test_set, threshold=50 )
@@ -844,9 +933,9 @@ def metrics_for_both_classes_hard_voter(test_set_x, test_set_y):
     avg_recall = (recall_one + recall_zero) / 2
     return print(f"precision for zero is {round(precision_zero, 3)} and recall for zero is {round(recall_zero, 3)} \nprecision for one is {round(precision_one, 3)} and recall for one is {round(recall_one, 3)}\npercentage of none is {100 * round(percentage_of_none, 3)}%\naverage precision for both classes is {round(avg_precision, 3)}\naverage recall for both classes is {round(avg_recall, 3)}\n\n")
 
-top_mod_RFC.fit(X_train_pca_full, y_train_full)
-voting_clf.fit(X_train_pca_full, y_train_full)
-metrics_for_both_classes_hard_voter(test_set_x=X_test_full, test_set_y=y_test_full)
+top_mod_RFC.fit(X_train_pca_full_changed, y_train_full_changed)
+voting_clf.fit(X_train_pca_full_changed, y_train_full_changed)
+metrics_for_both_classes_hard_voter(test_set_x=X_test_pca_full_changed, test_set_y=y_test_full)
 
 
 
