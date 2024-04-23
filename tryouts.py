@@ -17,6 +17,7 @@ from sklearn.ensemble import VotingClassifier
 from sklearn.metrics import recall_score
 from sklearn.metrics import confusion_matrix
 from sklearn.metrics import precision_recall_curve
+from sklearn.metrics import roc_auc_score
 import matplotlib.pyplot as plt
 from sklearn.model_selection import cross_val_predict
 from sklearn.ensemble import BaggingClassifier
@@ -24,6 +25,8 @@ from sklearn.mixture import BayesianGaussianMixture
 from sklearn.mixture import GaussianMixture
 import random
 from sklearn.decomposition import PCA
+from sklearn.cluster import k_means
+from xgboost import XGBClassifier
 
 dataset_choice = "same_weight_class_ratios" #Choose between "same_weight_class_ratios" or "same_y_ratios"
 
@@ -123,6 +126,7 @@ y_test_final = y_test_full.copy()['Winner']
 
 
 #1st lets try the 2nd approach 
+'''
 (y_train_full == 1).sum() / (y_train_full == 0).sum()
 (y_test_full == 1).sum() / (y_test_full == 0).sum()
 #so we must change N data point from 0 to 1 where N is
@@ -135,7 +139,10 @@ for index in y_train_full.index:
 X_train_pca_full_winner_zero = X_train_pca_full_winner_zero.iloc[indexes]
 X_train_pca_full_winner_zero
 #training set with only winners = 0
-'''
+
+
+
+
 #i will use GaussianMixtures to cluster the zero winners training set.
 bmg = BayesianGaussianMixture(n_components=20, n_init=10, random_state=42)
 bmg.fit(X_train_pca_full)
@@ -154,7 +161,7 @@ for i in range(1, 20, 1):
 bic_score
 aic_score
 #it seems that the 10 clusters give the best result
-'''
+
 gm = GaussianMixture(n_components=10, n_init=10)
 gm.fit(X_train_pca_full_winner_zero)
 weights = []
@@ -310,9 +317,14 @@ X_test_pca_full_changed.to_csv('X_test_pca_full_changed.csv', index=False)
 y_train_full_changed.to_csv('y_train_full_changed.csv', index=False)
 #Saving the datasets
 (y_train_full_changed == 0).sum() / (y_train_full_changed == 1).sum()
+'''
+#training sets where we changed some values of 0 to 1 based on keeping the rates of instances found in the GaussianMixtures of 10 n_components fitted
+X_train_pca_full_changed = pd.read_csv("./X_train_pca_full_changed.csv")
+X_test_pca_full_changed = pd.read_csv("./X_test_pca_full_changed.csv")
+y_train_full_changed = pd.read_csv("./y_train_full_changed.csv")
 
-weight_minoniry_class_full = (y_train_full == 0).sum() / (y_train_full == 1).sum()
 
+weight_minoniry_class_full = ((y_train_full == 0).sum() / (y_train_full == 1).sum()).values[0]
 
 
 
@@ -423,7 +435,7 @@ def optimize_RFC(params, param_names, x, y):
     params= dict(zip(param_names, params))
     
     kf = StratifiedKFold(n_splits=5)
-    presicions = []
+    auc_scores = []
     for idx in kf.split(X=x, y=y):
         train_idx, test_idx = idx[0], idx[1]
         xtrain = x.loc[train_idx]
@@ -432,65 +444,46 @@ def optimize_RFC(params, param_names, x, y):
         xtest = x.loc[test_idx]
         ytest = y.loc[test_idx]
         
-        weight_minoniry = (ytrain == 0).sum() / (ytrain == 1).sum()
-        model = RandomForestClassifier(**params)
+        
+        model = RandomForestClassifier(**params, class_weight={0:1, 1:1.45})
         model.fit(xtrain, ytrain)
-        preds = model.predict(xtest)
-        predicted_zero = 0
-        predicted_one = 0
-        predicted_none = 0
-        correct_zero = 0
-        correct_one = 0
-        winner_zero = (ytest == 0).reset_index()['Winner']
-        winner_one = (ytest == 1).reset_index()['Winner']
-        for i in range(len(xtest)):
-            if (preds[i] == 0):
-                predicted_zero = predicted_zero + 1
-                if winner_zero[i]:
-                    correct_zero = correct_zero + 1
-            if (preds[i] == 1):
-                predicted_one = predicted_one + 1
-                if winner_one[i]:
-                    correct_one = correct_one + 1
-        if predicted_zero == 0:
-            predicted_zero = 1
-        if predicted_one == 0:
-            predicted_one = 1
-        #avoid division by zero
-        precision_zero = correct_zero / predicted_zero
-        precision_one = correct_one / predicted_one
-        avg_prec = (precision_one + precision_zero) / 2
-        presicions.append(avg_prec)
+        preds = model.predict_proba(xtest)
+        winner_one = preds[:, 1]
+        auc = roc_auc_score(ytest, winner_one)
+        auc_scores.append(auc)
     
-    return -1.0 * np.mean(presicions)
+    return -1.0 * np.mean(auc_scores)
 
 
 
 param_space_RFC = [
-    space.Integer(3, 15, name="max_depth"),
-    space.Integer(200, 700, name="n_estimators"),
+    space.Integer(3, 20, name="max_depth"),
+    space.Integer(200, 900, name="n_estimators"),
     space.Categorical(["gini", "entropy"], name="criterion"),
-    space.Real(0.01, 1, prior="uniform" ,name="max_features")
+    space.Real(0.01, 1, prior="uniform" ,name="max_features"),
+    space.Real(0.01, 1, prior="uniform" ,name="max_samples"),
 ]
 param_names_RFC = [
     "max_depth",
     "n_estimators",
     "criterion",
-    "max_features"
+    "max_features",
+    "max_samples"
 ]
 
 
 optimization_function_RFC = partial(
     optimize_RFC,
     param_names = param_names_RFC,
-    x = X_train_pca_full_changed,
-    y = y_train_full_changed
+    x = X_train_pca_full,
+    y = y_train_full
 )
 
 result_RFC =  gp_minimize(
     optimization_function_RFC,
     dimensions = param_space_RFC,
-    verbose=10 
+    verbose=10,
+    n_calls=30
 )
 
 print(
@@ -499,10 +492,11 @@ print(
 #for the same_weight_class_ratios and balanced dataset
 #{'max_depth': 13, 'n_estimators': 673, 'criterion': 'gini', 'max_features': 0.9901292474497067}
 #{'max_depth': 15, 'n_estimators': 334, 'criterion': 'entropy', 'max_features': 0.01115001788516646}
+#for the same_weight_class_ratios  unbalanced dataset and class_weight={0:1, 1:weight_minoniry_class_full
+#max_depth= 3, n_estimators= 700, criterion= entropy, max_features= 0.18396804650705606, max_samples= 0.1
+#for the same_weight_class_ratios  unbalanced dataset and class_weight={0:1, 1:1.45}
 
-
-
-top_mod_RFC = RandomForestClassifier(n_estimators=673, max_depth=13, random_state=42, criterion='gini', max_features=0.9901292474497067)
+top_mod_RFC = RandomForestClassifier(max_depth= 3, n_estimators= 700, criterion= 'entropy', max_features= 0.18396804650705606, max_samples= 0.1, class_weight={0:1, 1:1.45})
 
 
 
@@ -593,11 +587,10 @@ print(
 #{'max_depth': 1, 'subsample': 1.0, 'learning_rate': 0.021677020921780407}
 top_mod_GBC = GradientBoostingClassifier(n_estimators=500, n_iter_no_change=10, max_depth=1, subsample=1, learning_rate=0.021677020921780407)
 
-def optimize_SVC(params, param_names, x, y):
+def optimize_XGB(params, param_names, x, y):
     params= dict(zip(param_names, params))
-    model = BaggingClassifier(SVC(kernel='rbf', **params), n_estimators=100, max_features=0.3)
     kf = StratifiedKFold(n_splits=5)
-    presicions = []
+    auc_scores = []
     for idx in kf.split(X=x, y=y):
         train_idx, test_idx = idx[0], idx[1]
         xtrain = x.loc[train_idx]
@@ -606,40 +599,69 @@ def optimize_SVC(params, param_names, x, y):
         xtest = x.loc[test_idx]
         ytest = y.loc[test_idx]
         
+        
+        model = XGBClassifier(**params, scale_pos_weight= 1.3913330873665453)
         model.fit(xtrain, ytrain)
-        preds = model.predict(xtest)
-        fold_pres = precision_score(ytest, preds)
-        presicions.append(fold_pres)
-    return -1.0 * np.mean(presicions)
+        preds = model.predict_proba(xtest)
+        winner_one = preds[:, 1]
+        auc = roc_auc_score(ytest, winner_one)
+        auc_scores.append(auc)
+    return -1.0 * np.mean(auc_scores)
 
-param_space_SVC = [
-    space.Real(0.01, 300, prior="uniform" ,name="C"),
-    space.Real(0.1, 2, prior="uniform" ,name="gamma")
+param_space_XGB = [
+    space.Integer(2, 8, name="max_depth"),
+    space.Real(0.001, 1.0, prior="log-uniform" ,name="learning_rate"),
+    space.Real(0.1, 1.0, prior="uniform" ,name="subsample"),
+    space.Real(0.3, 1.0, prior="uniform" ,name="colsample_bytree"),
+    space.Real(0.3, 1.0, prior="uniform" ,name="colsample_bylevel"),
+    space.Real(0.3, 1.0, prior="uniform" ,name="colsample_bynode"),
+    space.Real(0.0, 10.0, prior="uniform" ,name="reg_alpha"),
+    space.Real(0.0, 10.0, prior="uniform" ,name="reg_lambda"),
+    space.Real(0.0, 15.0, prior="uniform" ,name="gamma"),
+    
 ]
-param_names_SVC = [
-    "C",
+param_names_XGB = [
+    "max_depth",
+    "learning_rate",
+    "subsample",
+    "colsample_bytree",
+    "colsample_bylevel",
+    "colsample_bynode",
+    "reg_alpha",
+    "reg_lambda",
     "gamma",
+   
+    
 ]
 
-optimization_function_SVC = partial(
-    optimize_SVC,
-    param_names = param_names_SVC,
+optimization_function_XGB = partial(
+    optimize_XGB,
+    param_names = param_names_XGB,
     x = X_train_pca_full,
     y = y_train_full
 )
 
-result_SVC =  gp_minimize(
-    optimization_function_SVC,
-    dimensions = param_space_SVC,
+result_XGB =  gp_minimize(
+    optimization_function_XGB,
+    dimensions = param_space_XGB,
     verbose=10,
-    n_calls=30
+    n_calls=100,
 )
 
 print(
-    dict(zip(param_names_SVC, result_SVC.x))
+    dict(zip(param_names_XGB, result_XGB.x))
 )
-#{'C': 1000.0, 'gamma': 0.38279667625542757}
-top_mod_SVC = BaggingClassifier(SVC(kernel='rbf', probability=True, class_weight={0:1 , 1:weight_minoniry_class}, C=256.6619199677021, gamma=0.11674269193229327), n_estimators=500, max_samples=100)
+#for the 'changed' x, y
+#max_depth= 8, learning_rate= 0.14853209522354252, subsample= 1.0, colsample_bytree= 1.0, colsample_bylevel= 1.0, colsample_bynode= 0.3, reg_alpha= 0.0, reg_lambda= 10.0, gamma= 3.032654722224418, scale_pos_weight= 0.899401006807208
+#for the unbalanced dataset
+#max_depth= 2, learning_rate= 0.018649572919629702, subsample= 0.3082460927861192, colsample_bytree= 1.0, colsample_bylevel= 0.8108681922822245, colsample_bynode= 1.0, reg_alpha= 0.0, reg_lambda= 0.0, gamma= 10.0, scale_pos_weight= 1.1196603874123938
+#for the unbalanced dataset and fixes scale_pos_weight at the weight minority class full
+#max_depth= 2, learning_rate= 0.03310425369858327, subsample= 0.3, colsample_bytree= 1.0, colsample_bylevel= 1.0, colsample_bynode= 1.0, reg_alpha= 0.0, reg_lambda= 0.0, gamma= 0.0
+#for the unbalanced dataset and  scale_pos_weight= 1.3913330873665453
+#max_depth= 3, learning_rate= 0.025131944380062544, subsample= 0.4349890855990146, colsample_bytree= 1.0, colsample_bylevel= 0.9098375303771553, colsample_bynode= 0.6677042615417232, reg_alpha= 2.0554171330772206, reg_lambda= 4.620076924012009, gamma= 5.651886443117005, scale_pos_weight= 1.3913330873665453
+
+
+top_mod_XGB = XGBClassifier(max_depth= 3, learning_rate= 0.025131944380062544, subsample= 0.4349890855990146, colsample_bytree= 1.0, colsample_bylevel= 0.9098375303771553, colsample_bynode= 0.6677042615417232, reg_alpha= 2.0554171330772206, reg_lambda= 4.620076924012009, gamma= 5.651886443117005, scale_pos_weight= 1.3913330873665453)
 
 
 #bayesian hyperparameter search for a AdaBoostClassifier of DecisionTreeClassifier
@@ -720,7 +742,7 @@ estimators = [
     ('ABC', top_mod_ABC),
 ]
 
-voting_clf = VotingClassifier(estimators=estimators, voting='soft', weights=)
+voting_clf = VotingClassifier(estimators=estimators, voting='soft')
 
 
 #Our classifiers will predict that the class is one if the probabilities it gives for that class is over the number threshold
@@ -834,10 +856,11 @@ def probas_stratify_kfolds(model, x, y, threshold, samples=None):
 #we will look for over 10% recall.That means for every ufc card (about 15 fights) it will surely give a confident answer
 
 #The way to adjust the precision-recall balance is via the threshold value (and the samples for the monte carlo method on the NN).It only makes sense to take values over 0.5 (because the prediction for zero is when this value is under 1 - threshold)
-for i in range(55, 59, 1):
-    probas_stratify_kfolds(top_mod_RFC, x=X_train_pca_full_changed, y=y_train_full_changed, threshold=i / 100)
+for i in range(50, 57, 1):
+    probas_stratify_kfolds(top_mod_RFC, x=X_train_pca_full, y=y_train_full, threshold=i / 100)
 
 '''
+for same_weight_class_ratio and X_train_pca_full_changed
 for threshold 0.58
 precision for zero is 0.544 and recall for zero is 0.126 
 precision for one is 0.597 and recall for one is 0.114
@@ -845,9 +868,54 @@ percentage of none is 78.5%
 average precision for both classes is 0.57
 average recall for both classes is 0.12
 '''
+'''
+for same_weight_class_ratio and X_train_pca_full and class weights equal to minority...
+for threshold 0.53
+precision for zero is 0.71 and recall for zero is 0.339 
+precision for one is 0.611 and recall for one is 0.207
+percentage of none is 58.199999999999996%
+average precision for both classes is 0.66
+average recall for both classes is 0.273
+'''
 
-for i in range(50, 53, 1):
-    probas_stratify_kfolds(voting_clf, x=X_train_pca_full_changed, y=y_train_full_changed, threshold = i / 100)
+for i in range(50, 65, 1):
+    probas_stratify_kfolds(top_mod_XGB, x=X_train_pca_full, y=y_train_full, threshold = i / 100)
+'''
+for same_weight_class_ratio and X_train_pca_full_changed
+for threshold 0.65
+precision for zero is 0.548 and recall for zero is 0.199 
+precision for one is 0.573 and recall for one is 0.115
+percentage of none is 71.7%
+average precision for both classes is 0.56
+average recall for both classes is 0.157
+'''
+'''
+for same_weight_class_ratio and X_train_pca_full
+for threshold 0.54
+precision for zero is 0.661 and recall for zero is 0.611 
+precision for one is 0.618 and recall for one is 0.137
+percentage of none is 37.1%
+average precision for both classes is 0.639
+average recall for both classes is 0.374
+'''
+'''
+for same_weight_class_ratio and X_train_pca_full and fixed scale_pos_weight 
+for threshold 0.62
+precision for zero is 0.747 and recall for zero is 0.142 
+precision for one is 0.612 and recall for one is 0.109
+percentage of none is 81.5%
+average precision for both classes is 0.68
+average recall for both classes is 0.125
+'''
+'''
+for same_weight_class_ratio and X_train_pca_full and scale_pos_weight =  1.39
+for threshold 0.59
+precision for zero is 0.731 and recall for zero is 0.2 
+precision for one is 0.605 and recall for one is 0.196
+percentage of none is 70.5%
+average precision for both classes is 0.668
+average recall for both classes is 0.198
+'''
 
 for i in range(50, 70, 1):
     for j in range(1, 20, 1):
