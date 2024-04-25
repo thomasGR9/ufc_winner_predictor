@@ -27,6 +27,8 @@ import random
 from sklearn.decomposition import PCA
 from sklearn.cluster import k_means
 from xgboost import XGBClassifier
+from sklearn.naive_bayes import GaussianNB
+import lightgbm as lgb
 
 dataset_choice = "same_weight_class_ratios" #Choose between "same_weight_class_ratios" or "same_y_ratios"
 
@@ -417,6 +419,7 @@ model_clone.save("61acc.h5")  61acc, X pca without cat
 '''
 top_mod_NN = tf.keras.models.load_model('./61acc.h5')
 
+
 possible_n_est = [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000]
 possible_max_depth = [1, 2, 3, 4, 5, 6, 7]
 class_weight = (y_train_full == 0).sum() / (y_train_full == 1).sum()
@@ -496,7 +499,7 @@ print(
 #max_depth= 3, n_estimators= 700, criterion= entropy, max_features= 0.18396804650705606, max_samples= 0.1
 #for the same_weight_class_ratios  unbalanced dataset and class_weight={0:1, 1:1.45}
 
-top_mod_RFC = RandomForestClassifier(max_depth= 3, n_estimators= 700, criterion= 'entropy', max_features= 0.18396804650705606, max_samples= 0.1, class_weight={0:1, 1:1.45})
+top_mod_RFC = RandomForestClassifier(max_depth= 6, n_estimators= 858, criterion= 'gini', max_features= 0.26726799261727396, max_samples= 0.35215557719305063, class_weight={0:1, 1:1.45}, random_state=True)
 
 
 
@@ -509,10 +512,10 @@ top_mod_RFC = RandomForestClassifier(max_depth= 3, n_estimators= 700, criterion=
 
 #bayesian hyperparameter search for a GradientBoostingClassifier
 
-def optimize_GBC(params, param_names, x, y):
+def optimize_meta(params, param_names, x, y):
     params= dict(zip(param_names, params))
     kf = StratifiedKFold(n_splits=5)
-    presicions = []
+    auc_scores = []
     for idx in kf.split(X=x, y=y):
         train_idx, test_idx = idx[0], idx[1]
         xtrain = x.loc[train_idx]
@@ -522,70 +525,60 @@ def optimize_GBC(params, param_names, x, y):
         ytest = y.loc[test_idx]
         
         
-        model = GradientBoostingClassifier(**params, n_estimators=500, n_iter_no_change=10)
+        model = XGBClassifier(**params)
         model.fit(xtrain, ytrain)
-        preds = model.predict(xtest)
-        predicted_zero = 0
-        predicted_one = 0
-        predicted_none = 0
-        correct_zero = 0
-        correct_one = 0
-        winner_zero = (ytest == 0).reset_index()['Winner']
-        winner_one = (ytest == 1).reset_index()['Winner']
-        for i in range(len(xtest)):
-            if (preds[i] == 0):
-                predicted_zero = predicted_zero + 1
-                if winner_zero[i]:
-                    correct_zero = correct_zero + 1
-            if (preds[i] == 1):
-                predicted_one = predicted_one + 1
-                if winner_one[i]:
-                    correct_one = correct_one + 1
-        if predicted_zero == 0:
-            predicted_zero = 1
-        if predicted_one == 0:
-            predicted_one = 1
-        #avoid division by zero
-            
-        precision_zero = correct_zero / predicted_zero
-        precision_one = correct_one / predicted_one
-        avg_prec = (precision_one + precision_zero) / 2
-        presicions.append(avg_prec)
-    return -1.0 * np.mean(presicions)
+        preds = model.predict_proba(xtest)
+        winner_one = preds[:, 1]
+        auc = roc_auc_score(ytest, winner_one)
+        auc_scores.append(auc)
+    return -1.0 * np.mean(auc_scores)
 
-param_space_GBC = [
-    space.Integer(1, 10, name="max_depth"),
-    space.Real(0.4, 1, prior="uniform" ,name="subsample"),
-    space.Real(0.001, 1, prior="uniform" ,name="learning_rate")
+param_space_meta = [
+    space.Integer(2, 8, name="max_depth"),
+    space.Real(0.001, 1.0, prior="log-uniform" ,name="learning_rate"),
+    space.Real(0.1, 1.0, prior="uniform" ,name="subsample"),
+    space.Real(0.3, 1.0, prior="uniform" ,name="colsample_bytree"),
+    space.Real(0.3, 1.0, prior="uniform" ,name="colsample_bylevel"),
+    space.Real(0.3, 1.0, prior="uniform" ,name="colsample_bynode"),
+    space.Real(0.0, 10.0, prior="uniform" ,name="reg_alpha"),
+    space.Real(0.0, 10.0, prior="uniform" ,name="reg_lambda"),
+    space.Real(0.0, 15.0, prior="uniform" ,name="gamma"),
+    
 ]
-param_names_GBC = [
+param_names_meta = [
     "max_depth",
+    "learning_rate",
     "subsample",
-    "learning_rate"
+    "colsample_bytree",
+    "colsample_bylevel",
+    "colsample_bynode",
+    "reg_alpha",
+    "reg_lambda",
+    "gamma",
+   
+    
 ]
 
-optimization_function_GBC = partial(
-    optimize_GBC,
-    param_names = param_names_GBC,
-    x = X_train_pca_full_changed,
-    y = y_train_full_changed
+optimization_function_meta = partial(
+    optimize_meta,
+    param_names = param_names_meta,
+    x = estimetors_training,
+    y = y_train_full
 )
 
-result_GBC =  gp_minimize(
-    optimization_function_GBC,
-    dimensions = param_space_GBC,
+result_meta =  gp_minimize(
+    optimization_function_meta,
+    dimensions = param_space_meta,
     verbose=10,
-    n_calls=50
+    n_calls=100,
 )
 
 print(
-    dict(zip(param_names_GBC, result_GBC.x))
+    dict(zip(param_names_meta, result_meta.x))
 )
-#for the same_y_ratios dataset
-#{'max_depth': 2, 'subsample': 0.8, 'learning_rate': 0.01}
-#for the same_weight_class_ratios balanced dataset
-#{'max_depth': 1, 'subsample': 1.0, 'learning_rate': 0.021677020921780407}
-top_mod_GBC = GradientBoostingClassifier(n_estimators=500, n_iter_no_change=10, max_depth=1, subsample=1, learning_rate=0.021677020921780407)
+#for the same_weight_class dataset class_weight={0:1, 1:2}, kernel='poly'
+#max_depth= 7, learning_rate= 0.1211034131720386, subsample= 0.5485564456132208, colsample_bytree= 1.0, colsample_bylevel= 1.0, colsample_bynode= 1.0, reg_alpha= 3.694610283154878, reg_lambda= 10.0, gamma= 0.0}
+meta_learner = XGBClassifier(max_depth= 7, learning_rate= 0.1211034131720386, subsample= 0.5485564456132208, colsample_bytree= 1.0, colsample_bylevel= 1.0, colsample_bynode= 1.0, reg_alpha= 3.694610283154878, reg_lambda= 10.0, gamma= 0.0)
 
 def optimize_XGB(params, param_names, x, y):
     params= dict(zip(param_names, params))
@@ -665,11 +658,11 @@ top_mod_XGB = XGBClassifier(max_depth= 3, learning_rate= 0.025131944380062544, s
 
 
 #bayesian hyperparameter search for a AdaBoostClassifier of DecisionTreeClassifier
-def optimize_ABC(params, param_names, x, y):
+def optimize_Light(params, param_names, x, y):
     params= dict(zip(param_names, params))
-    model = AdaBoostClassifier(DecisionTreeClassifier(max_depth=2), **params)
+    model = lgb.LGBMClassifier(**params, boosting='dart',scale_pos_weight= weight_minoniry_class_full, objective = 'binary')
     kf = StratifiedKFold(n_splits=5)
-    presicions = []
+    auc_scores = []
     for idx in kf.split(X=x, y=y):
         train_idx, test_idx = idx[0], idx[1]
         xtrain = x.loc[train_idx]
@@ -679,70 +672,72 @@ def optimize_ABC(params, param_names, x, y):
         ytest = y.loc[test_idx]
         
         model.fit(xtrain, ytrain)
-        preds = model.predict(xtest)
-        predicted_zero = 0
-        predicted_one = 0
-        predicted_none = 0
-        correct_zero = 0
-        correct_one = 0
-        winner_zero = (ytest == 0).reset_index()['Winner']
-        winner_one = (ytest == 1).reset_index()['Winner']
-        for i in range(len(xtest)):
-            if (preds[i] == 0):
-                predicted_zero = predicted_zero + 1
-                if winner_zero[i]:
-                    correct_zero = correct_zero + 1
-            if (preds[i] == 1):
-                predicted_one = predicted_one + 1
-                if winner_one[i]:
-                    correct_one = correct_one + 1
-        if predicted_zero == 0:
-            predicted_zero = 1
-        if predicted_one == 0:
-            predicted_one = 1
-        precision_zero = correct_zero / predicted_zero
-        precision_one = correct_one / predicted_one
-        avg_prec = (precision_one + precision_zero) / 2
-        presicions.append(avg_prec)
-    return -1.0 * np.mean(presicions)
+        preds = model.predict_proba(xtest)
+        winner_one = preds[:, 1]
+        auc = roc_auc_score(ytest, winner_one)
+        auc_scores.append(auc)
+    return -1.0 * np.mean(auc_scores)
 
-param_space_ABC = [
-    space.Integer(20, 100, name="n_estimators"),
-    space.Real(0.01, 0.8, prior="uniform" ,name="learning_rate")
+param_space_Light = [
+    space.Integer(2, 8, name="max_depth"),
+    space.Real(0.001, 1.0, prior="log-uniform" ,name="learning_rate"),
+    space.Integer(100, 1000, name="num_iterations"),
+    space.Integer(10, 250, name="num_leaves"),
+    space.Integer(100, 500, name="max_bin"),
+    space.Integer(5, 50, name="min_data_in_leaf"),
+    space.Real(0.1, 1.0, prior="uniform" ,name="feature_fraction"),
+    space.Real(0.1, 1.0, prior="uniform" ,name="bagging_fraction"),
+    space.Integer(1, 20, name="bagging_freq"),
+    space.Real(0.0, 3.0, prior="uniform" ,name="lambda_l1"),
+    space.Real(0.0, 3.0, prior="uniform" ,name="lambda_l2"),
+ 
 ]
-param_names_ABC = [
-    "n_estimators",
+param_names_Light = [
+    "max_depth",
     "learning_rate",
+    "num_iterations",
+    "num_leaves",
+    "max_bin",
+    "min_data_in_leaf",
+    "feature_fraction",
+    "bagging_fraction",
+    "bagging_freq",
+    "lambda_l1",
+    "lambda_l2"
 ]
 
-optimization_function_ABC = partial(
-    optimize_ABC,
-    param_names = param_names_ABC,
-    x = X_train_pca_full_changed,
-    y = y_train_full_changed
+optimization_function_Light = partial(
+    optimize_Light,
+    param_names = param_names_Light,
+    x = X_train_pca_full,
+    y = y_train_full
 )
 
-result_ABC =  gp_minimize(
-    optimization_function_ABC,
-    dimensions = param_space_ABC,
+result_Light =  gp_minimize(
+    optimization_function_Light,
+    dimensions = param_space_Light,
     verbose=10,
     n_calls=50
 )
 
 print(
-    dict(zip(param_names_ABC, result_ABC.x))
+    dict(zip(param_names_Light, result_Light.x))
 )
-#{'n_estimators': 34, 'learning_rate': 0.10781322577235282}
+#max_depth= 2, learning_rate= 0.001, num_iterations= 1000, num_leaves= 65, max_bin= 500, min_data_in_leaf= 5, feature_fraction= 0.5969977940077565, bagging_fraction= 0.1, bagging_freq= 10, lambda_l1= 0.0, lambda_l2= 0.0
 #for the same_weight_class_ratios balanced dataset
 #{'n_estimators': 55, 'learning_rate': 0.7013603138363024}
-top_mod_ABC = AdaBoostClassifier(DecisionTreeClassifier(max_depth=2), n_estimators=55, learning_rate=0.7013603138363024)
+top_mod_Light =  lgb.LGBMClassifier(max_depth= 2, learning_rate= 0.001, num_iterations= 1000, num_leaves= 65, max_bin= 500, min_data_in_leaf= 5, feature_fraction= 0.5969977940077565, bagging_fraction= 0.1, bagging_freq= 10, lambda_l1= 0.0, lambda_l2= 0.0)
+
+
+bays = GaussianNB()
 
 estimators = [
-    ('GBC', top_mod_GBC),
-    ('ABC', top_mod_ABC),
+    ('XGB', top_mod_XGB),
+    ('RFC', top_mod_RFC),
 ]
 
 voting_clf = VotingClassifier(estimators=estimators, voting='soft')
+
 
 
 #Our classifiers will predict that the class is one if the probabilities it gives for that class is over the number threshold
@@ -750,13 +745,26 @@ voting_clf = VotingClassifier(estimators=estimators, voting='soft')
 #Else it will not give a prediction of the class (appends it as -1)
 #We configure the classifiers that way because it enables to pick a threshold that gives high accuracy for both classes
 
+def class_weight(y):
+    weights = []
+    for i in range(len(y)):
+        if y.values[i][0] == 0:
+            weights.append(1)
+        if y.values[i][0] == 1:
+            weights.append(weight_minoniry_class_full)
+    return weights
+            
 
 #This function will return a list of predictions by the model on the test_set_x
 def model_gen_test(model, test_set, threshold, samples=None):
     if model == top_mod_NN:
+        if samples == 1:
+            win_one = model.predict(test_set)
+        if samples > 1:
         #monte carlo method
-        preds = np.stack([model(test_set, training=True) for sample in range(samples)])
-        win_one = preds.mean(axis=0)
+            preds = np.stack([model(test_set, training=True) for sample in range(samples)])
+            win_one = preds.mean(axis=0)
+
     else:
          y_probas = model.predict_proba(test_set)
          win_one = y_probas[:, 1]
@@ -829,7 +837,8 @@ def probas_stratify_kfolds(model, x, y, threshold, samples=None):
         ytest = y.loc[test_idx]
         if model != top_mod_NN:
             model.fit(xtrain, ytrain)
-        
+        if model == bays:
+            model.fit(xtrain, ytrain, sample_weight=class_weight(xtrain, ytrain))
         precision_zero, precision_one,  recall_zero, recall_one, percentage_of_none  = metrics_for_both_classes(model = model, test_set_x = xtest, test_set_y= ytest, threshold = threshold, samples=samples)
         avg_precision = (precision_one + precision_zero) / 2
         avg_recall = (recall_one + recall_zero) / 2
@@ -849,7 +858,11 @@ def probas_stratify_kfolds(model, x, y, threshold, samples=None):
     avg_rec_one = sum(recalls_one) / len(recalls_one)
     avg_rec_zero = sum(recalls_zero) / len(recalls_zero)
     avg_none = sum(avg_nones) / len(avg_nones)
-    return print(f"for threshold {threshold}\nprecision for zero is {round(avg_prec_zero, 3)} and recall for zero is {round(avg_rec_zero, 3)} \nprecision for one is {round(avg_prec_one, 3)} and recall for one is {round(avg_rec_one, 3)}\npercentage of none is {100 * round(avg_none, 3)}%\naverage precision for both classes is {round(avg_prec_both, 3)}\naverage recall for both classes is {round(avg_rec_both, 3)}\n\n")
+    if model == top_mod_NN:
+        return print(f"for threshold {threshold} and samples {samples}\nprecision for zero is {round(avg_prec_zero, 3)} and recall for zero is {round(avg_rec_zero, 3)} \nprecision for one is {round(avg_prec_one, 3)} and recall for one is {round(avg_rec_one, 3)}\npercentage of none is {100 * round(avg_none, 3)}%\naverage precision for both classes is {round(avg_prec_both, 3)}\naverage recall for both classes is {round(avg_rec_both, 3)}\n\n")
+    else:
+        return print(f"for threshold {threshold}\nprecision for zero is {round(avg_prec_zero, 3)} and recall for zero is {round(avg_rec_zero, 3)} \nprecision for one is {round(avg_prec_one, 3)} and recall for one is {round(avg_rec_one, 3)}\npercentage of none is {100 * round(avg_none, 3)}%\naverage precision for both classes is {round(avg_prec_both, 3)}\naverage recall for both classes is {round(avg_rec_both, 3)}\n\n")
+
 
 #Its time to choose the right balance between precision and recall.I believe that the metric that i should give the most of the weight is precision (the average precision of the two classes)
 #I look at it as a gambler's view.Its way more important that you are more certain about the correct winner than finding the most correct winners, if you are gonna bet for the winner.
@@ -876,6 +889,15 @@ precision for one is 0.611 and recall for one is 0.207
 percentage of none is 58.199999999999996%
 average precision for both classes is 0.66
 average recall for both classes is 0.273
+'''
+'''
+for the same_weight_class_ratios  unbalanced dataset and class_weight={0:1, 1:1.45}
+for threshold 0.56
+precision for zero is 0.719 and recall for zero is 0.306 
+precision for one is 0.585 and recall for one is 0.281
+percentage of none is 55.1%
+average precision for both classes is 0.652
+average recall for both classes is 0.294
 '''
 
 for i in range(50, 65, 1):
@@ -917,10 +939,57 @@ average precision for both classes is 0.668
 average recall for both classes is 0.198
 '''
 
+for i in range(65, 75, 1):
+    probas_stratify_kfolds(bays, x=X_train_pca_full, y=y_train_full, threshold = i / 100)
+
+'''
+for threshold 0.7
+precision for zero is 0.743 and recall for zero is 0.164 
+precision for one is 0.611 and recall for one is 0.11
+percentage of none is 79.60000000000001%
+average precision for both classes is 0.677
+average recall for both classes is 0.137
+'''
 for i in range(50, 70, 1):
-    for j in range(1, 20, 1):
-        probas_stratify_kfolds(top_mod_NN, x=X_train_pca_full_changed, y=y_train_full_changed, threshold = i / 100, samples=j)
-#
+    probas_stratify_kfolds(top_mod_Light, x=X_train_pca_full, y=y_train_full, threshold = 50)
+
+
+
+for i in range(62, 63, 1):
+    for j in range(1, 3, 1):
+        probas_stratify_kfolds(top_mod_NN, x=X_train_pca_full, y=y_train_full, threshold = i / 100, samples=j)
+
+'''
+for threshold 0.61 and samples 1
+precision for zero is 0.811 and recall for zero is 0.16 
+precision for one is 0.671 and recall for one is 0.447
+percentage of none is 60.6%
+average precision for both classes is 0.741
+average recall for both classes is 0.303
+'''
+top_mod_RFC.fit(X_train_pca_full, y_train_full)
+top_mod_XGB.fit(X_train_pca_full, y_train_full)
+bays.fit(X_train_pca_full, y_train_full, sample_weight=class_weight(y_train_full))
+
+
+precision_zero, precision_one, recall_zero, recall_one, percentage_of_none = metrics_for_both_classes(model = top_mod_NN, test_set_x = X_test_pca, test_set_y = y_test_full, threshold= 0.59, samples=1)
+
+
+def aver_pred_proba(test_set_x):
+    XGB_pred = top_mod_XGB.predict_proba(test_set_x)
+    RFC_pred = top_mod_RFC.predict_proba(test_set_x)
+    bays_pred = bays.predict_proba(test_set_x)
+    NN_pred_win_one_ = top_mod_NN.predict(test_set_x)
+    XGB_pred_win_one = pd.Series(XGB_pred[:, 1]).apply(lambda x: x/4).tolist()
+    RFC_pred_win_one = pd.Series(RFC_pred[:, 1]).apply(lambda x: x/4).tolist()
+    bays_pred_win_one = pd.Series(bays_pred[:, 1]).apply(lambda x: x/4).tolist()
+    NN_pred_win_one = (NN_pred_win_one_ / 4)[:,0].tolist()
+    df = pd.DataFrame(data = {'XGB_pred': XGB_pred_win_one, 'RFC_pred': RFC_pred_win_one, 'bays_pred': bays_pred_win_one, 'NN_pred': NN_pred_win_one})
+    return df
+
+estimetors_training = aver_pred_proba(test_set_x=X_train_pca_full)
+
+
 
 #Lastly we will combine all the previous classifiers into one that does hard voting
 
@@ -951,12 +1020,12 @@ def model_gen_test_for_hard_voter(model, test_set, threshold, samples=None):
 #If 1 classifier predict one class and the other 2 are not confident enough it will append non-prediction
 #If none classifier is confident enough it will append non-prediction
 def hard_voter(test_set):
-    RFC_preds = model_gen_test_for_hard_voter(model=top_mod_RFC, test_set=test_set, threshold=50 )
-    voting_preds = model_gen_test_for_hard_voter(model=voting_clf, test_set=test_set, threshold=50 )
-    NN_preds = model_gen_test_for_hard_voter(model=top_mod_NN, test_set=test_set, threshold=50, samples=2 ) 
+    RFC_preds = model_gen_test_for_hard_voter(model=top_mod_RFC, test_set=test_set, threshold=0.58 )
+    XGB_preds = model_gen_test_for_hard_voter(model=top_mod_XGB, test_set=test_set, threshold=0.61 )
+    bays_preds = model_gen_test_for_hard_voter(model=bays, test_set=test_set, threshold=0.72 ) 
     final_preds = []
     for i in range(len(test_set)):
-        j = RFC_preds[i] + voting_preds[i] + NN_preds[i]
+        j = RFC_preds[i] + XGB_preds[i] + bays_preds[i]
         if j > 1.5:
             final_preds.append(1)
         if j < (-1.5):
@@ -1001,9 +1070,10 @@ def metrics_for_both_classes_hard_voter(test_set_x, test_set_y):
     avg_recall = (recall_one + recall_zero) / 2
     return print(f"precision for zero is {round(precision_zero, 3)} and recall for zero is {round(recall_zero, 3)} \nprecision for one is {round(precision_one, 3)} and recall for one is {round(recall_one, 3)}\npercentage of none is {100 * round(percentage_of_none, 3)}%\naverage precision for both classes is {round(avg_precision, 3)}\naverage recall for both classes is {round(avg_recall, 3)}\n\n")
 
-top_mod_RFC.fit(X_train_pca_full_changed, y_train_full_changed)
-voting_clf.fit(X_train_pca_full_changed, y_train_full_changed)
-metrics_for_both_classes_hard_voter(test_set_x=X_test_pca_full_changed, test_set_y=y_test_full)
+top_mod_RFC.fit(X_train_pca_full, y_train_full)
+top_mod_XGB.fit(X_train_pca_full, y_train_full)
+bays.fit(X_train_pca_full, y_train_full, sample_weight=class_weight(y_train_full))
+metrics_for_both_classes_hard_voter(test_set_x=X_test_pca, test_set_y=y_test_full)
 
 
 
