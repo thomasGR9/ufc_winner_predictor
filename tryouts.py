@@ -29,7 +29,9 @@ from sklearn.cluster import k_means
 from xgboost import XGBClassifier
 from sklearn.naive_bayes import GaussianNB
 import lightgbm as lgb
-
+from sklearn.linear_model import LogisticRegression
+import keras_tuner as kt
+from sklearn.calibration import CalibratedClassifierCV
 dataset_choice = "same_weight_class_ratios" #Choose between "same_weight_class_ratios" or "same_y_ratios"
 
 def training_test_sets(dataset_ch):
@@ -54,6 +56,18 @@ def training_test_sets(dataset_ch):
                     X_test_fair_full.drop(index, inplace=True)
                     X_test_fair_without_pca_full.drop(index, inplace=True)
                     
+        y_test_fair_full.reset_index(drop=True, inplace=True)
+        X_test_fair_full.reset_index(drop=True, inplace=True)
+        X_test_fair_without_pca_full.reset_index(drop=True, inplace=True)
+
+        
+        ind_list=[i for i in range(len(y_test_fair_full))]
+        ind_list_rd = random.shuffle(ind_list)
+        
+        y_test_fair_full = y_test_fair_full.iloc[ind_list].reset_index(drop=True)        
+        X_test_fair_full = X_test_fair_full.iloc[ind_list].reset_index(drop=True)
+        X_test_fair_without_pca_full = X_test_fair_without_pca_full.iloc[ind_list].reset_index(drop=True)
+                            
         y_test_full = y_test_same_weight_class_ratios.copy()
         X_test_full = X_test_full_same_weight_class_ratios.copy()
         y_train_full = y_train_same_weight_class_ratios.copy()
@@ -82,7 +96,20 @@ def training_test_sets(dataset_ch):
                     y_test_fair_full.drop(index, inplace=True)
                     X_test_fair_full.drop(index, inplace=True)
                     X_test_fair_without_pca_full.drop(index, inplace=True)
-                    
+
+        y_test_fair_full.reset_index(drop=True, inplace=True)
+        X_test_fair_full.reset_index(drop=True, inplace=True)
+        X_test_fair_without_pca_full.reset_index(drop=True, inplace=True)
+
+        
+        ind_list=[i for i in range(len(y_test_fair_full))]
+        ind_list_rd = random.shuffle(ind_list)
+        
+        y_test_fair_full = y_test_fair_full.iloc[ind_list].reset_index(drop=True)        
+        X_test_fair_full = X_test_fair_full.iloc[ind_list].reset_index(drop=True)
+        X_test_fair_without_pca_full = X_test_fair_without_pca_full.iloc[ind_list].reset_index(drop=True)
+
+               
         y_test_full = y_test_same_y_ratios.copy()
         X_test_full = X_test_full_same_y_ratios.copy()
         y_train_full = y_train_same_y_ratios.copy()
@@ -115,6 +142,7 @@ X_train_pca_full = X_train_full.drop(['B_Stance_Orthodox', 'B_Stance_Southpaw', 
 X_train_pca = X_train_pca_cat[:3500].drop(['B_Stance_Orthodox', 'B_Stance_Southpaw', 'B_Stance_Switch', 'R_Stance_Orthodox', 'R_Stance_Southpaw', 'R_Stance_Switch'], axis=1)
 X_valid_pca = X_valid_pca_cat.drop(['B_Stance_Orthodox', 'B_Stance_Southpaw', 'B_Stance_Switch', 'R_Stance_Orthodox', 'R_Stance_Southpaw', 'R_Stance_Switch'], axis=1)
 X_test_pca = X_test_pca_cat.drop(['B_Stance_Orthodox', 'B_Stance_Southpaw', 'B_Stance_Switch', 'R_Stance_Orthodox', 'R_Stance_Southpaw', 'R_Stance_Switch'], axis=1)
+X_test_fair_pca = X_test_fair_full.drop(['B_Stance_Orthodox', 'B_Stance_Southpaw', 'B_Stance_Switch', 'R_Stance_Orthodox', 'R_Stance_Southpaw', 'R_Stance_Switch'], axis=1)
 #X without pca with cat
 
 #X without pca without cat
@@ -127,6 +155,9 @@ y_valid_final = y_train_full[3500:].select_dtypes(np.float64)['Winner']
 y_test_final = y_test_full.copy()['Winner']
 
 
+
+(y_test_fair_full == 0).sum() / (y_test_fair_full == 1).sum()
+(y_test_final == 0).sum() / (y_test_final == 1).sum()
 #1st lets try the 2nd approach 
 '''
 (y_train_full == 1).sum() / (y_train_full == 0).sum()
@@ -331,58 +362,164 @@ weight_minoniry_class_full = ((y_train_full == 0).sum() / (y_train_full == 1).su
 
 
 
+def build_model(hp):
+    dnn_layers_ss = [1,2,3,4,5,6,7,8,9]
+    dnn_units_min, dnn_units_max = 32, 712
+    dr_rate_min, dr_rate_max = 0.1, 0.5
+    active_func_ss = ['swish', 'gelu']
+    optimizer_ss = ['adamW']
+    lr_min, lr_max = 1e-4, 1e-1
+    l2_min, l2_max = 0, 0.30
+    
+    active_func = hp.Choice('activation', active_func_ss)
+    optimizer = hp.Choice('optimizer', optimizer_ss)
+    lr = hp.Float('learning_rate', min_value=lr_min, max_value=lr_max, sampling='log')
+    regul = hp.Float('l2', min_value=l2_min, max_value=l2_max)
+    inputs = tf.keras.Input(shape=(X_train_pca.shape[1]))
+  
+    
+    # create hidden layers
+    dnn_units = hp.Int(f"0_units", min_value=dnn_units_min, max_value=dnn_units_max)
+    dense = tf.keras.layers.Dense(units=dnn_units, activation=active_func, kernel_initializer="he_normal", kernel_regularizer=tf.keras.regularizers.l2(regul))(inputs)
+    tf.keras.layers.BatchNormalization()(dense)
+    for layer_i in range(hp.Choice("n_layers", dnn_layers_ss) - 1):
+        dnn_units = hp.Int(f"{layer_i}_units", min_value=dnn_units_min, max_value=dnn_units_max)
+        dense = tf.keras.layers.Dense(units=dnn_units, activation=active_func, kernel_initializer="he_normal", kernel_regularizer=tf.keras.regularizers.l2(regul))(dense)
+        dense = tf.keras.layers.BatchNormalization()(dense)
+        if hp.Boolean("dropout"):
+            dr_rate = hp.Float('dr_rate', min_value=dr_rate_min, max_value=dr_rate_max)
+            dense = tf.keras.layers.Dropout(rate=dr_rate)(dense)
+    outputs = tf.keras.layers.Dense(units=1, activation='sigmoid')(dense)
+    model = tf.keras.Model(inputs=inputs, outputs=outputs)
+    
+    if optimizer == "adamW":
+        optimizer = tf.keras.optimizers.AdamW(learning_rate=lr)
+    elif optimizer == "SGD":
+        optimizer = tf.keras.optimizers.SGD(learning_rate=lr)
+    else:
+        raise("Not supported optimizer")
+        
+    model.compile(optimizer=optimizer,
+                  loss=tf.keras.losses.BinaryCrossentropy(),
+                  metrics=['AUC'])
+    return model
 
-n_units = 300
-activation = tf.keras.activations.gelu
-initializer = tf.keras.initializers.he_normal()
+def build_tuner(model, hpo_method, objective, dir_name):
+    if hpo_method == "RandomSearch":
+        tuner = kt.RandomSearch(model, objective=objective, max_trials=3, executions_per_trial=1,
+                               project_name=hpo_method, directory=dir_name)
+    elif hpo_method == "Hyperband":
+        tuner = kt.Hyperband(model, objective=objective, max_epochs=20, executions_per_trial=2,
+                            project_name=hpo_method, overwrite=True)
+    elif hpo_method == "BayesianOptimization":
+        tuner = kt.BayesianOptimization(model, objective=objective, max_trials=10, executions_per_trial=1,
+                                       project_name=hpo_method)
+    return tuner
+  
+obj = kt.Objective('val_auc', direction='max')
+dir_name = "v1"
+randomsearch_tuner = build_tuner(build_model, "Hyperband", obj, dir_name)
+randomsearch_tuner.search(X_train_pca, y_train_final, epochs=5, validation_data= (X_valid_pca, y_valid_final), class_weight = {0:1, 1:weight_minoniry_class_full})
+
+top3_models = randomsearch_tuner.get_best_models(num_models = 3)
+best_mod = top3_models[0]
+
+top3_params = randomsearch_tuner.get_best_hyperparameters(num_trials = 3)
+best_hyp = top3_params[0].values
+'''
+{'activation': 'gelu',
+ 'optimizer': 'adamW',
+ 'learning_rate': 0.01540787095021625,
+ 'l2': 0.08245190881911092,
+ '0_units': 398,
+ 'n_layers': 2,
+ 'dropout': True,
+ '1_units': 418,
+ '2_units': 374,
+ '3_units': 131,
+ '4_units': 508,
+ 'dr_rate': 0.4158562653630815,
+ '5_units': 530,
+ '6_units': 327,
+ '7_units': 296,
+ 'tuner/epochs': 20,
+ 'tuner/initial_epoch': 7,
+ 'tuner/bracket': 2,
+ 'tuner/round': 2,
+ 'tuner/trial_id': '0012'}
+'''
+
+second_mod = top3_models[1]
+second_hyp = top3_params[1].values
+'''
+{'activation': 'gelu',
+ 'optimizer': 'adamW',
+ 'learning_rate': 0.0008556581060099099,
+ 'l2': 0.24416588766106204,
+ '0_units': 291,
+ 'n_layers': 6,
+ 'tuner/epochs': 20,
+ 'tuner/initial_epoch': 7,
+ 'tuner/bracket': 2,
+ 'tuner/round': 2,
+ 'dropout': False,
+ '1_units': 32,
+ '2_units': 32,
+ '3_units': 32,
+ '4_units': 32,
+ 'tuner/trial_id': '0015',
+ 'dr_rate': 0.3633049831509424,
+ '5_units': 701,
+ '6_units': 61,
+ '7_units': 248}
+'''
+third_mod = top3_models[2]
+third_hyp = top3_params[2].values
 
 
-model_NN = tf.keras.Sequential([
-    tf.keras.layers.Input(shape=X_train_pca.shape[1:]),
-    tf.keras.layers.BatchNormalization(),
-    tf.keras.layers.Dense(n_units, activation= activation, kernel_initializer=initializer),
-    tf.keras.layers.BatchNormalization(),
-    tf.keras.layers.Dense(n_units, activation= activation, kernel_initializer=initializer),
-    tf.keras.layers.BatchNormalization(),
-    tf.keras.layers.Dense(n_units, activation= activation, kernel_initializer=initializer),
-    tf.keras.layers.BatchNormalization(),
-    tf.keras.layers.Dense(n_units, activation= activation, kernel_initializer=initializer),
-    tf.keras.layers.Dropout(rate=0.3),
-    tf.keras.layers.BatchNormalization(),
-    tf.keras.layers.Dense(n_units, activation= activation, kernel_initializer=initializer),
-    tf.keras.layers.Dropout(rate=0.3),
-    tf.keras.layers.BatchNormalization(),
-    tf.keras.layers.Dense(n_units, activation= activation, kernel_initializer=initializer),
-    tf.keras.layers.Dropout(rate=0.3),
-    tf.keras.layers.BatchNormalization(),
-    tf.keras.layers.Dense(n_units, activation= activation, kernel_initializer=initializer),
-    tf.keras.layers.Dropout(rate=0.3),
-    tf.keras.layers.BatchNormalization(),
-    tf.keras.layers.Dense(n_units, activation= activation, kernel_initializer=initializer),
-    tf.keras.layers.Dropout(rate=0.3),
-    tf.keras.layers.BatchNormalization(),
-    tf.keras.layers.Dense(n_units, activation= activation, kernel_initializer=initializer),
-    tf.keras.layers.Dropout(rate=0.3),
-    tf.keras.layers.BatchNormalization(),
-    tf.keras.layers.Dense(1, activation='sigmoid')
-])
+'''
+{'activation': 'swish',
+ 'optimizer': 'adamW',
+ 'learning_rate': 0.0013481629442763257,
+ 'l2': 0.11901563594343909,
+ '0_units': 482,
+ 'n_layers': 1,
+ 'dropout': False,
+ '1_units': 262,
+ '2_units': 387,
+ '3_units': 144,
+ '4_units': 530,
+ 'dr_rate': 0.34711629941809663,
+ '5_units': 248,
+ '6_units': 563,
+ '7_units': 319,
+ 'tuner/epochs': 7,
+ 'tuner/initial_epoch': 0,
+ 'tuner/bracket': 1,
+ 'tuner/round': 0}
+'''
 
+best_mod.summary()
+callback = tf.keras.callbacks.EarlyStopping(monitor='val_auc' ,patience=20, restore_best_weights=True)
+third_mod.fit(X_train_pca, y_train_final, epochs= 100, class_weight = {0:1, 1:weight_minoniry_class_full}, callbacks=[callback], validation_data=(X_valid_pca, y_valid_final))
+history = third_mod.fit(X_train_pca_full, y_train_full, epochs= 10, class_weight = {0:1, 1:weight_minoniry_class_full})
+best_mod.evaluate(x=X_test_pca, y=y_test_final)
+top_mod_NN = third_mod
 
+metrics_for_test_set(model=top_mod_NN, test_set_x=X_test_fair_pca, test_set_y=y_test_fair_full, threshold=0.6, samples=1)
+'''
+for the 3rd_mod
+for threshold 0.64
+precision for zero is 0.659 and recall for zero is 0.149 
+precision for one is 0.712 and recall for one is 0.134
+percentage of none is 79.3%
+average precision for both classes is 0.686
+average recall for both classes is 0.141
+'''
 
+# third_mod.save("third_mod_NN.h5")
 
-lr_schedule = tf.keras.optimizers.schedules.ExponentialDecay(initial_learning_rate=0.1 , decay_steps=10000, decay_rate=0.96 )
-optimizer = tf.keras.optimizers.legacy.Nadam(clipnorm=1)
-callback = tf.keras.callbacks.EarlyStopping(monitor='val_accuracy' ,patience=20, restore_best_weights=True)
-
-model_NN.compile(loss='binary_crossentropy', optimizer=optimizer, metrics=['accuracy'])
-#we should put a higher weight in the underpressented class (1 in this case)
-weight_minoniry_class = (y_train_final == 0).sum() / (y_train_final == 1).sum()
-
-history = model_NN.fit(X_train_pca, y_train_final, epochs=100, validation_data=(X_valid_pca, y_valid_final), batch_size=32, callbacks=[callback], class_weight= {0:1, 1:weight_minoniry_class})
-
-model.evaluate(x=X_test_pca, y=y_test_final)
-
-pd.DataFrame(history.history)[["accuracy", "val_accuracy"]].plot(figsize=(8, 5))
+pd.DataFrame(history.history).plot(figsize=(8, 5))
 
 
 
@@ -525,7 +662,7 @@ def optimize_meta(params, param_names, x, y):
         ytest = y.loc[test_idx]
         
         
-        model = XGBClassifier(**params)
+        model = LogisticRegression(**params, class_weight = {0:1, 1:1.5})
         model.fit(xtrain, ytrain)
         preds = model.predict_proba(xtest)
         winner_one = preds[:, 1]
@@ -534,29 +671,14 @@ def optimize_meta(params, param_names, x, y):
     return -1.0 * np.mean(auc_scores)
 
 param_space_meta = [
-    space.Integer(2, 8, name="max_depth"),
-    space.Real(0.001, 1.0, prior="log-uniform" ,name="learning_rate"),
-    space.Real(0.1, 1.0, prior="uniform" ,name="subsample"),
-    space.Real(0.3, 1.0, prior="uniform" ,name="colsample_bytree"),
-    space.Real(0.3, 1.0, prior="uniform" ,name="colsample_bylevel"),
-    space.Real(0.3, 1.0, prior="uniform" ,name="colsample_bynode"),
-    space.Real(0.0, 10.0, prior="uniform" ,name="reg_alpha"),
-    space.Real(0.0, 10.0, prior="uniform" ,name="reg_lambda"),
-    space.Real(0.0, 15.0, prior="uniform" ,name="gamma"),
-    
+    space.Real(0.001, 10000.0, prior="log-uniform" ,name="C"),
+    space.Integer(100, 300, name="max_iter"),    
+    space.Categorical(["liblinear", "newton-cg", "lbfgs", "newton-cholesky" ], name="solver")
 ]
 param_names_meta = [
-    "max_depth",
-    "learning_rate",
-    "subsample",
-    "colsample_bytree",
-    "colsample_bylevel",
-    "colsample_bynode",
-    "reg_alpha",
-    "reg_lambda",
-    "gamma",
-   
-    
+    "C",
+    "max_iter",
+    "solver"
 ]
 
 optimization_function_meta = partial(
@@ -570,15 +692,15 @@ result_meta =  gp_minimize(
     optimization_function_meta,
     dimensions = param_space_meta,
     verbose=10,
-    n_calls=100,
+    n_calls=250,
 )
 
 print(
     dict(zip(param_names_meta, result_meta.x))
 )
-#for the same_weight_class dataset class_weight={0:1, 1:2}, kernel='poly'
-#max_depth= 7, learning_rate= 0.1211034131720386, subsample= 0.5485564456132208, colsample_bytree= 1.0, colsample_bylevel= 1.0, colsample_bynode= 1.0, reg_alpha= 3.694610283154878, reg_lambda= 10.0, gamma= 0.0}
-meta_learner = XGBClassifier(max_depth= 7, learning_rate= 0.1211034131720386, subsample= 0.5485564456132208, colsample_bytree= 1.0, colsample_bylevel= 1.0, colsample_bynode= 1.0, reg_alpha= 3.694610283154878, reg_lambda= 10.0, gamma= 0.0)
+
+#'C': 7426.796406148584, 'max_iter': 100, 'solver': 'lbfgs'
+meta_learner = LogisticRegression(max_iter = 163, solver = 'newton-cholesky', class_weight = {0:1, 1:weight_minoniry_class_full})
 
 def optimize_XGB(params, param_names, x, y):
     params= dict(zip(param_names, params))
@@ -971,8 +1093,11 @@ top_mod_RFC.fit(X_train_pca_full, y_train_full)
 top_mod_XGB.fit(X_train_pca_full, y_train_full)
 bays.fit(X_train_pca_full, y_train_full, sample_weight=class_weight(y_train_full))
 
-
-precision_zero, precision_one, recall_zero, recall_one, percentage_of_none = metrics_for_both_classes(model = top_mod_NN, test_set_x = X_test_pca, test_set_y = y_test_full, threshold= 0.59, samples=1)
+def metrics_for_test_set(model, test_set_x, test_set_y, threshold, samples=None):
+    precision_zero, precision_one, recall_zero, recall_one, percentage_of_none = metrics_for_both_classes(model = model, test_set_x = test_set_x, test_set_y = test_set_y, threshold= threshold, samples=samples)
+    avg_prec = (precision_zero + precision_one) / 2
+    avg_rec = (recall_one + recall_zero) / 2
+    return print(f"for threshold {threshold}\nprecision for zero is {round(precision_zero, 3)} and recall for zero is {round(recall_zero, 3)} \nprecision for one is {round(precision_one, 3)} and recall for one is {round(recall_one, 3)}\npercentage of none is {100 * round(percentage_of_none, 3)}%\naverage precision for both classes is {round(avg_prec, 3)}\naverage recall for both classes is {round(avg_rec, 3)}\n\n")
 
 
 def aver_pred_proba(test_set_x):
@@ -988,9 +1113,23 @@ def aver_pred_proba(test_set_x):
     return df
 
 estimetors_training = aver_pred_proba(test_set_x=X_train_pca_full)
+meta_learner.fit(estimetors_training, y_train_full)
+meta_learner.coef_
+meta_learner.predict_proba(estimators_test)
+estimators_test = aver_pred_proba(test_set_x=X_test_fair_pca)
 
+for i in range(50, 99, 1):
+    metrics_for_test_set(model=meta_learner, test_set_x=estimators_test, test_set_y=y_test_fair_full, threshold=i / 100)
 
-
+'''
+for the meta_learner as a logistic regression model with max_iter = 163, solver = 'newton-cholesky', class_weight = {0:1, 1:weight_minoniry_class_full}
+for threshold 0.67
+precision for zero is 0.607 and recall for zero is 0.139 
+precision for one is 0.725 and recall for one is 0.149
+percentage of none is 78.3%
+average precision for both classes is 0.666
+average recall for both classes is 0.144
+'''
 #Lastly we will combine all the previous classifiers into one that does hard voting
 
 #Just as model_get_test but will append the class 0 predictions as -1 and the non-confident instances as 0.This is important to implement the hard voter
@@ -1073,7 +1212,17 @@ def metrics_for_both_classes_hard_voter(test_set_x, test_set_y):
 top_mod_RFC.fit(X_train_pca_full, y_train_full)
 top_mod_XGB.fit(X_train_pca_full, y_train_full)
 bays.fit(X_train_pca_full, y_train_full, sample_weight=class_weight(y_train_full))
-metrics_for_both_classes_hard_voter(test_set_x=X_test_pca, test_set_y=y_test_full)
+metrics_for_both_classes_hard_voter(test_set_x=X_test_fair_pca, test_set_y=y_test_fair_full)
+'''
+for test_set_x=X_test_fair_pca, test_set_y=y_test_fair_full
+precision for zero is 0.608 and recall for zero is 0.188 
+precision for one is 0.662 and recall for one is 0.121
+percentage of none is 75.4%
+average precision for both classes is 0.635
+average recall for both classes is 0.154
+
+
+'''
 
 
 
