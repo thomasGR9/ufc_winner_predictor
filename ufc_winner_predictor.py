@@ -3,9 +3,9 @@ df = pd.read_csv('../../datasets/ufc-master.csv')
 for column in df.columns:
     print(column)
 
-df['finish']
 
 
+#dropping a bunch of columns that should not matter much
 df1 = df[df.columns[9:]].drop(['title_bout', 'empty_arena', 'constant_1', 'B_match_weightclass_rank', 'R_match_weightclass_rank', 'R_Pound-for-Pound_rank', 'B_Pound-for-Pound_rank', 'better_rank'], axis=1)
 
 for column in df1.columns:
@@ -37,6 +37,7 @@ print(f'percentage of the dataset that fights have ranked fighters is: {(l/df2.s
 
 
 ~df2.iloc[:, 68:79].isna().iloc[0]
+#We have a column for every weight class and True-False statements on where the fighters are
 R_Series = []
 for j in range(df2.shape[0]):
     R_Series.append(16)
@@ -49,7 +50,7 @@ for j in range(df2.shape[0]):
             R_Series[j] = df2.iloc[:, 68:79].iloc[j][column]
    
 R_Series        
-            
+#The R_Series list will have the rank of the fighter of the division he is ,if he is unranked it will append 16 (ufc ranking rank as high as 15)    
 ~df2.iloc[:, 79:].isna().iloc[0]
 
 B_Series = []
@@ -65,6 +66,7 @@ for j in range(df2.shape[0]):
         
    
 B_Series
+#same as R but for fighters on the B (blue) corner
 
 df2['R_rank'] = R_Series
 df2['R_rank']
@@ -125,7 +127,7 @@ for i in range(df3.shape[0]):
             j = j + 1
 
 k / j
-#so when the diff is not B - R s R - B anid not a mistake
+#so when the diff is not B - R s R - B and is not a mistake
 for i in range(df3.shape[0]):
     if ~(df3['B_current_lose_streak'] - df3['R_current_lose_streak'] == df3['lose_streak_dif'])[i]:
         if (df3['R_current_lose_streak'] - df3['B_current_lose_streak'] == df3['lose_streak_dif'])[i]:
@@ -360,6 +362,7 @@ df5.drop(['gender', 'B_Weight_lbs', 'R_Weight_lbs'], axis=1, inplace=True)
 y = df5['Winner']
 x = df5.drop(['Winner'], axis=1)
 (y == "Red").sum() / (y == "Blue").sum()
+#we came back here to save test and training sets based on stratifying the winner values too
 from sklearn.model_selection import train_test_split
 X_train, X_test, y_train, y_test = train_test_split(x, y, stratify=y, test_size=0.2, shuffle=True)
 (y_train == "Red").sum() / (y_train == "Blue").sum()
@@ -667,7 +670,7 @@ X_train_num['B_Reach_cms'].min()
 for column in cols_for_chauv:
     plot_binary_outliers(plot_X_train_num_Chauvenets, column, column + '_outlier', False)
 
-#i will automate this 
+#i will automate this (dropping all the outliers for the remaining cols)
 for column in cols_for_chauv:
     for index in plot_X_train_num_Chauvenets[plot_X_train_num_Chauvenets[column+'_outlier']][column].index:
         if (X_train_num[column][index] > plot_X_train_num_Chauvenets[~plot_X_train_num_Chauvenets[column+'_outlier']][column].max()):
@@ -731,7 +734,7 @@ for col in remaining_cols_with_tail:
 
 X_test_num.drop(remaining_cols_with_tail, axis=1, inplace=True)
 
-
+#Standar scale the dataset
 from sklearn.preprocessing import StandardScaler
 std_scaler = StandardScaler()
 X_train_num_scaled_values = std_scaler.fit_transform(X_train_num)
@@ -767,10 +770,11 @@ for column in X_train_num_scaled_pca.columns:
 
 #we see that the pca features are much bell shaped like
 
-#in this branch we will combine the cat and num training values, then we will build a neural network to make the classification
+#We will combine the cat and num training values
 
 X_train_concat = pd.concat([X_train_num_scaled_pca, X_train_cat_en], axis=1)
 X_test_concat = pd.concat([X_test_num_scaled_pca, X_test_cat_en], axis=1)
+#Saving of the datasets
 '''
 X_train_concat.to_csv('X_train_concat.csv', index=False)
 X_test_concat.to_csv('X_test_concat.csv', index=False)
