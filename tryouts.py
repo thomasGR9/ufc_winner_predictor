@@ -47,7 +47,7 @@ def training_test_sets(dataset_ch):
         y_test_fair_full = y_test_same_weight_class_ratios.copy()
         X_test_fair_full = X_test_full_same_weight_class_ratios.copy()
         X_test_fair_without_pca_full = X_test_without_pca_full_same_weight_class_ratios.copy()
-
+        #we drop instances that the winner is 0 from the start to the finish until we achieve the same ratio
         for index in y_test_fair_full.index:
             ratio = ((y_test_fair_full == 1).sum() / (y_test_fair_full == 0).sum())[0]
             if (ratio < 1):
@@ -63,7 +63,7 @@ def training_test_sets(dataset_ch):
         
         ind_list=[i for i in range(len(y_test_fair_full))]
         ind_list_rd = random.shuffle(ind_list)
-        
+        #shuffling the indexes randomly
         y_test_fair_full = y_test_fair_full.iloc[ind_list].reset_index(drop=True)        
         X_test_fair_full = X_test_fair_full.iloc[ind_list].reset_index(drop=True)
         X_test_fair_without_pca_full = X_test_fair_without_pca_full.iloc[ind_list].reset_index(drop=True)
@@ -77,6 +77,7 @@ def training_test_sets(dataset_ch):
         X_test_without_pca_full = X_test_without_pca_full_same_weight_class_ratios.copy()
     
     if dataset_ch == "same_y_ratios":
+        #same as the other
         X_train_full_same_y_ratios = pd.read_csv('./X_train_concat_branch.csv', dtype=np.float64)
         X_test_full_same_y_ratios= pd.read_csv('./X_test_concat_branch.csv', dtype=np.float64)
         y_train_same_y_ratios= pd.read_csv('./y_train_branch.csv', dtype=np.float64)
@@ -122,11 +123,6 @@ def training_test_sets(dataset_ch):
 
 y_test_full, X_test_full, y_train_full, X_train_full, X_train_without_pca_full, X_test_without_pca_full, X_test_fair_full, X_test_fair_without_pca_full, y_test_fair_full = training_test_sets(dataset_choice)
 
-#Note on how to combat the zero biased predictions
-#1st way is to oversample the one class by some made up data based on the distribution of the class (SMOTE?)
-#2nd way is to use the pre-pca dataset and change the values of the features of some data such that B --> R , R --> B.The diff columns will be equal to (-1)*diff_column.Then for that data we will swamp the zero target to one until we got equal amounts of each in the training set.
-#This can be done because it shouldn't matter what corner the winner happened to be placed.
-#It could also help to put more weight on predictions of class one on the hyperparameter search part.
 
 
 
@@ -143,7 +139,7 @@ X_train_pca = X_train_pca_cat[:3500].drop(['B_Stance_Orthodox', 'B_Stance_Southp
 X_valid_pca = X_valid_pca_cat.drop(['B_Stance_Orthodox', 'B_Stance_Southpaw', 'B_Stance_Switch', 'R_Stance_Orthodox', 'R_Stance_Southpaw', 'R_Stance_Switch'], axis=1)
 X_test_pca = X_test_pca_cat.drop(['B_Stance_Orthodox', 'B_Stance_Southpaw', 'B_Stance_Switch', 'R_Stance_Orthodox', 'R_Stance_Southpaw', 'R_Stance_Switch'], axis=1)
 X_test_fair_pca = X_test_fair_full.drop(['B_Stance_Orthodox', 'B_Stance_Southpaw', 'B_Stance_Switch', 'R_Stance_Orthodox', 'R_Stance_Southpaw', 'R_Stance_Switch'], axis=1)
-#X without pca with cat
+
 
 #X without pca without cat
 X_train_without_pca = X_train_without_pca_full[:3500].select_dtypes(np.float64)
@@ -158,7 +154,10 @@ y_test_final = y_test_full.copy()['Winner']
 
 (y_test_fair_full == 0).sum() / (y_test_fair_full == 1).sum()
 (y_test_final == 0).sum() / (y_test_final == 1).sum()
-#1st lets try the 2nd approach 
+
+#Here i tried to combat the imbalance of the winner == 0 instances
+#The way is to use the pre-pca dataset and change the values of the features of some data such that B --> R , R --> B.The diff columns will be equal to (-1)*diff_column.Then for that data we will swamp the zero target to one until we got equal amounts of each in the training set.
+#This can be done because it shouldn't matter what corner the winner happened to be placed.
 '''
 (y_train_full == 1).sum() / (y_train_full == 0).sum()
 (y_test_full == 1).sum() / (y_test_full == 0).sum()
@@ -361,7 +360,7 @@ weight_minoniry_class_full = ((y_train_full == 0).sum() / (y_train_full == 1).su
 
 
 
-
+#Using the keras tuner library to search hyperparameters for a NN
 def build_model(hp):
     dnn_layers_ss = [1,2,3,4,5,6,7,8,9]
     dnn_units_min, dnn_units_max = 32, 712
@@ -418,13 +417,13 @@ def build_tuner(model, hpo_method, objective, dir_name):
   
 obj = kt.Objective('val_auc', direction='max')
 dir_name = "v1"
-randomsearch_tuner = build_tuner(build_model, "Hyperband", obj, dir_name)
-randomsearch_tuner.search(X_train_pca, y_train_final, epochs=5, validation_data= (X_valid_pca, y_valid_final), class_weight = {0:1, 1:weight_minoniry_class_full})
+Hyperband_tuner = build_tuner(build_model, "Hyperband", obj, dir_name)
+Hyperband_tuner.search(X_train_pca, y_train_final, epochs=5, validation_data= (X_valid_pca, y_valid_final), class_weight = {0:1, 1:weight_minoniry_class_full})
 
-top3_models = randomsearch_tuner.get_best_models(num_models = 3)
+top3_models = Hyperband_tuner.get_best_models(num_models = 3)
 best_mod = top3_models[0]
 
-top3_params = randomsearch_tuner.get_best_hyperparameters(num_trials = 3)
+top3_params = Hyperband_tuner.get_best_hyperparameters(num_trials = 3)
 best_hyp = top3_params[0].values
 '''
 {'activation': 'gelu',
@@ -522,7 +521,7 @@ average recall for both classes is 0.141
 pd.DataFrame(history.history).plot(figsize=(8, 5))
 
 
-
+#It seemed that the model that i tuned and trained earlier outperformed all the 3 best models of the hyperparameter search so i will be using this
 
 '''
 model.save("62acc.h5") 62%acc, X with pca and cat
@@ -554,6 +553,7 @@ model_clone.evaluate(x=X_test_pca, y=y_test_final)
 
 model_clone.save("61acc.h5")  61acc, X pca without cat
 '''
+#the NN model i will be using
 top_mod_NN = tf.keras.models.load_model('./61acc.h5')
 
 
@@ -569,8 +569,8 @@ for n_est in possible_n_est:
         print(f"For n_est:{n_est} and max_depth:{max_depth} we have train_acc:{train_acc} and test_acc{test_acc}")
 #the best test accuracy is  59.59% for n_est:400 and max_depth:6, so we are gonna narrow our bayesian hyperparameter search around those numbers
 
-#we will rerun the optimization phase now with the same weight class ratios dataset and with the optimization metric to be the mean of the precisions of 0 and 1 classes
-
+#we will rerun the optimization phase now with the same weight class ratios dataset and with the optimization metric to be the roc-auc score
+#bayesian hyperparameter search for a RandomForestClassifier
 def optimize_RFC(params, param_names, x, y):
     params= dict(zip(param_names, params))
     
@@ -636,72 +636,12 @@ print(
 #max_depth= 3, n_estimators= 700, criterion= entropy, max_features= 0.18396804650705606, max_samples= 0.1
 #for the same_weight_class_ratios  unbalanced dataset and class_weight={0:1, 1:1.45}
 
+#final model: top_mod_RFC = RandomForestClassifier(max_depth= 6, n_estimators= 858, criterion= 'gini', max_features= 0.26726799261727396, max_samples= 0.35215557719305063, class_weight={0:1, 1:1.45}, random_state=True)
 top_mod_RFC = RandomForestClassifier(max_depth= 6, n_estimators= 858, criterion= 'gini', max_features= 0.26726799261727396, max_samples= 0.35215557719305063, class_weight={0:1, 1:1.45}, random_state=True)
 
 
 
-
-
-
-
-
-
-
 #bayesian hyperparameter search for a GradientBoostingClassifier
-
-def optimize_meta(params, param_names, x, y):
-    params= dict(zip(param_names, params))
-    kf = StratifiedKFold(n_splits=5)
-    auc_scores = []
-    for idx in kf.split(X=x, y=y):
-        train_idx, test_idx = idx[0], idx[1]
-        xtrain = x.loc[train_idx]
-        ytrain = y.loc[train_idx]
-        
-        xtest = x.loc[test_idx]
-        ytest = y.loc[test_idx]
-        
-        
-        model = LogisticRegression(**params, class_weight = {0:1, 1:1.5})
-        model.fit(xtrain, ytrain)
-        preds = model.predict_proba(xtest)
-        winner_one = preds[:, 1]
-        auc = roc_auc_score(ytest, winner_one)
-        auc_scores.append(auc)
-    return -1.0 * np.mean(auc_scores)
-
-param_space_meta = [
-    space.Real(0.001, 10000.0, prior="log-uniform" ,name="C"),
-    space.Integer(100, 300, name="max_iter"),    
-    space.Categorical(["liblinear", "newton-cg", "lbfgs", "newton-cholesky" ], name="solver")
-]
-param_names_meta = [
-    "C",
-    "max_iter",
-    "solver"
-]
-
-optimization_function_meta = partial(
-    optimize_meta,
-    param_names = param_names_meta,
-    x = estimetors_training,
-    y = y_train_full
-)
-
-result_meta =  gp_minimize(
-    optimization_function_meta,
-    dimensions = param_space_meta,
-    verbose=10,
-    n_calls=250,
-)
-
-print(
-    dict(zip(param_names_meta, result_meta.x))
-)
-
-#'C': 7426.796406148584, 'max_iter': 100, 'solver': 'lbfgs'
-meta_learner = LogisticRegression(max_iter = 163, solver = 'newton-cholesky', class_weight = {0:1, 1:weight_minoniry_class_full})
-
 def optimize_XGB(params, param_names, x, y):
     params= dict(zip(param_names, params))
     kf = StratifiedKFold(n_splits=5)
@@ -775,14 +715,14 @@ print(
 #for the unbalanced dataset and  scale_pos_weight= 1.3913330873665453
 #max_depth= 3, learning_rate= 0.025131944380062544, subsample= 0.4349890855990146, colsample_bytree= 1.0, colsample_bylevel= 0.9098375303771553, colsample_bynode= 0.6677042615417232, reg_alpha= 2.0554171330772206, reg_lambda= 4.620076924012009, gamma= 5.651886443117005, scale_pos_weight= 1.3913330873665453
 
-
+#final model: top_mod_XGB = XGBClassifier(max_depth= 3, learning_rate= 0.025131944380062544, subsample= 0.4349890855990146, colsample_bytree= 1.0, colsample_bylevel= 0.9098375303771553, colsample_bynode= 0.6677042615417232, reg_alpha= 2.0554171330772206, reg_lambda= 4.620076924012009, gamma= 5.651886443117005, scale_pos_weight= 1.3913330873665453)
 top_mod_XGB = XGBClassifier(max_depth= 3, learning_rate= 0.025131944380062544, subsample= 0.4349890855990146, colsample_bytree= 1.0, colsample_bylevel= 0.9098375303771553, colsample_bynode= 0.6677042615417232, reg_alpha= 2.0554171330772206, reg_lambda= 4.620076924012009, gamma= 5.651886443117005, scale_pos_weight= 1.3913330873665453)
 
 
-#bayesian hyperparameter search for a AdaBoostClassifier of DecisionTreeClassifier
-def optimize_Light(params, param_names, x, y):
+#bayesian hyperparameter search for a LogisticRegression as a meta learner
+#The choice of a LogisticRegression model is that it gives calibrated estimated probabilities as the output and that the more powerful models would overfit for sure.We restrain the C values to be very small for the same reason as well 
+def optimize_meta(params, param_names, x, y):
     params= dict(zip(param_names, params))
-    model = lgb.LGBMClassifier(**params, boosting='dart',scale_pos_weight= weight_minoniry_class_full, objective = 'binary')
     kf = StratifiedKFold(n_splits=5)
     auc_scores = []
     for idx in kf.split(X=x, y=y):
@@ -793,6 +733,8 @@ def optimize_Light(params, param_names, x, y):
         xtest = x.loc[test_idx]
         ytest = y.loc[test_idx]
         
+        
+        model = LogisticRegression(**params, class_weight = {0:1, 1:1.5})
         model.fit(xtrain, ytrain)
         preds = model.predict_proba(xtest)
         winner_one = preds[:, 1]
@@ -800,65 +742,50 @@ def optimize_Light(params, param_names, x, y):
         auc_scores.append(auc)
     return -1.0 * np.mean(auc_scores)
 
-param_space_Light = [
-    space.Integer(2, 8, name="max_depth"),
-    space.Real(0.001, 1.0, prior="log-uniform" ,name="learning_rate"),
-    space.Integer(100, 1000, name="num_iterations"),
-    space.Integer(10, 250, name="num_leaves"),
-    space.Integer(100, 500, name="max_bin"),
-    space.Integer(5, 50, name="min_data_in_leaf"),
-    space.Real(0.1, 1.0, prior="uniform" ,name="feature_fraction"),
-    space.Real(0.1, 1.0, prior="uniform" ,name="bagging_fraction"),
-    space.Integer(1, 20, name="bagging_freq"),
-    space.Real(0.0, 3.0, prior="uniform" ,name="lambda_l1"),
-    space.Real(0.0, 3.0, prior="uniform" ,name="lambda_l2"),
- 
+param_space_meta = [
+    space.Real(0.01, 10.0, prior="log-uniform" ,name="C"),
+    space.Integer(100, 300, name="max_iter"),    
+    space.Categorical(["liblinear", "newton-cg", "lbfgs", "newton-cholesky" ], name="solver")
 ]
-param_names_Light = [
-    "max_depth",
-    "learning_rate",
-    "num_iterations",
-    "num_leaves",
-    "max_bin",
-    "min_data_in_leaf",
-    "feature_fraction",
-    "bagging_fraction",
-    "bagging_freq",
-    "lambda_l1",
-    "lambda_l2"
+param_names_meta = [
+    "C",
+    "max_iter",
+    "solver"
 ]
 
-optimization_function_Light = partial(
-    optimize_Light,
-    param_names = param_names_Light,
-    x = X_train_pca_full,
+optimization_function_meta = partial(
+    optimize_meta,
+    param_names = param_names_meta,
+    x = estimators_training,
     y = y_train_full
 )
 
-result_Light =  gp_minimize(
-    optimization_function_Light,
-    dimensions = param_space_Light,
+result_meta =  gp_minimize(
+    optimization_function_meta,
+    dimensions = param_space_meta,
     verbose=10,
-    n_calls=50
+    n_calls=100,
 )
 
 print(
-    dict(zip(param_names_Light, result_Light.x))
+    dict(zip(param_names_meta, result_meta.x))
 )
-#max_depth= 2, learning_rate= 0.001, num_iterations= 1000, num_leaves= 65, max_bin= 500, min_data_in_leaf= 5, feature_fraction= 0.5969977940077565, bagging_fraction= 0.1, bagging_freq= 10, lambda_l1= 0.0, lambda_l2= 0.0
-#for the same_weight_class_ratios balanced dataset
-#{'n_estimators': 55, 'learning_rate': 0.7013603138363024}
-top_mod_Light =  lgb.LGBMClassifier(max_depth= 2, learning_rate= 0.001, num_iterations= 1000, num_leaves= 65, max_bin= 500, min_data_in_leaf= 5, feature_fraction= 0.5969977940077565, bagging_fraction= 0.1, bagging_freq= 10, lambda_l1= 0.0, lambda_l2= 0.0)
+
+#max_iter = 163, solver = 'newton-cholesky', class_weight = {0:1, 1:minority...}
+#C= 100.0, max_iter= 300, solver= 'liblinear'
+
+#final model meta_learner = LogisticRegression(C= 10.0, max_iter= 300, solver= 'liblinear', class_weight = {0:1, 1:1.5})
+meta_learner = LogisticRegression(C= 10.0, max_iter= 300, solver= 'liblinear', class_weight = {0:1, 1:1.5})
 
 
-bays = GaussianNB()
 
-estimators = [
-    ('XGB', top_mod_XGB),
-    ('RFC', top_mod_RFC),
-]
 
-voting_clf = VotingClassifier(estimators=estimators, voting='soft')
+#naive bayes classifier
+bayes = GaussianNB()
+
+
+#So we end up with four classifiers : NN, RFC, XGB, and GaussianNaiveBayes.The fact that the classifiers are adequately independed will provide enough diversity on the type of errors they make.So that the ensemble at the end will provide better predictions
+
 
 
 
@@ -867,6 +794,7 @@ voting_clf = VotingClassifier(estimators=estimators, voting='soft')
 #Else it will not give a prediction of the class (appends it as -1)
 #We configure the classifiers that way because it enables to pick a threshold that gives high accuracy for both classes
 
+#This function is created to be passed on the fit method of the GaussianNB() and it will give a weight of 1 to the zero class and a weight of (weight_minoniry_class_full) to the the one class during training
 def class_weight(y):
     weights = []
     for i in range(len(y)):
@@ -959,7 +887,7 @@ def probas_stratify_kfolds(model, x, y, threshold, samples=None):
         ytest = y.loc[test_idx]
         if model != top_mod_NN:
             model.fit(xtrain, ytrain)
-        if model == bays:
+        if model == bayes:
             model.fit(xtrain, ytrain, sample_weight=class_weight(xtrain, ytrain))
         precision_zero, precision_one,  recall_zero, recall_one, percentage_of_none  = metrics_for_both_classes(model = model, test_set_x = xtest, test_set_y= ytest, threshold = threshold, samples=samples)
         avg_precision = (precision_one + precision_zero) / 2
@@ -1062,7 +990,7 @@ average recall for both classes is 0.198
 '''
 
 for i in range(65, 75, 1):
-    probas_stratify_kfolds(bays, x=X_train_pca_full, y=y_train_full, threshold = i / 100)
+    probas_stratify_kfolds(bayes, x=X_train_pca_full, y=y_train_full, threshold = i / 100)
 
 '''
 for threshold 0.7
@@ -1073,7 +1001,7 @@ average precision for both classes is 0.677
 average recall for both classes is 0.137
 '''
 for i in range(50, 70, 1):
-    probas_stratify_kfolds(top_mod_Light, x=X_train_pca_full, y=y_train_full, threshold = 50)
+    probas_stratify_kfolds(meta_learner, x=estimators_training, y=y_train_full, threshold = i/100)
 
 
 
@@ -1089,40 +1017,46 @@ percentage of none is 60.6%
 average precision for both classes is 0.741
 average recall for both classes is 0.303
 '''
+
+#fitting all the classifiers on the full training set
 top_mod_RFC.fit(X_train_pca_full, y_train_full)
 top_mod_XGB.fit(X_train_pca_full, y_train_full)
-bays.fit(X_train_pca_full, y_train_full, sample_weight=class_weight(y_train_full))
+bayes.fit(X_train_pca_full, y_train_full, sample_weight=class_weight(y_train_full))
 
+#will return a print of the metrics of a model on a test set
 def metrics_for_test_set(model, test_set_x, test_set_y, threshold, samples=None):
     precision_zero, precision_one, recall_zero, recall_one, percentage_of_none = metrics_for_both_classes(model = model, test_set_x = test_set_x, test_set_y = test_set_y, threshold= threshold, samples=samples)
     avg_prec = (precision_zero + precision_one) / 2
     avg_rec = (recall_one + recall_zero) / 2
     return print(f"for threshold {threshold}\nprecision for zero is {round(precision_zero, 3)} and recall for zero is {round(recall_zero, 3)} \nprecision for one is {round(precision_one, 3)} and recall for one is {round(recall_one, 3)}\npercentage of none is {100 * round(percentage_of_none, 3)}%\naverage precision for both classes is {round(avg_prec, 3)}\naverage recall for both classes is {round(avg_rec, 3)}\n\n")
 
-
+#will return a pandas dataframe that for every row of (test_set_x) we have four columns.Each column has the value of the predicted probability (divided by 4) of the instance (of the test_set_x) beloning to class 1, for the four classifiers.
 def aver_pred_proba(test_set_x):
     XGB_pred = top_mod_XGB.predict_proba(test_set_x)
     RFC_pred = top_mod_RFC.predict_proba(test_set_x)
-    bays_pred = bays.predict_proba(test_set_x)
+    bayes_pred = bayes.predict_proba(test_set_x)
     NN_pred_win_one_ = top_mod_NN.predict(test_set_x)
     XGB_pred_win_one = pd.Series(XGB_pred[:, 1]).apply(lambda x: x/4).tolist()
     RFC_pred_win_one = pd.Series(RFC_pred[:, 1]).apply(lambda x: x/4).tolist()
-    bays_pred_win_one = pd.Series(bays_pred[:, 1]).apply(lambda x: x/4).tolist()
+    bayes_pred_win_one = pd.Series(bayes_pred[:, 1]).apply(lambda x: x/4).tolist()
     NN_pred_win_one = (NN_pred_win_one_ / 4)[:,0].tolist()
-    df = pd.DataFrame(data = {'XGB_pred': XGB_pred_win_one, 'RFC_pred': RFC_pred_win_one, 'bays_pred': bays_pred_win_one, 'NN_pred': NN_pred_win_one})
+    df = pd.DataFrame(data = {'XGB_pred': XGB_pred_win_one, 'RFC_pred': RFC_pred_win_one, 'bayes_pred': bayes_pred_win_one, 'NN_pred': NN_pred_win_one})
     return df
 
-estimetors_training = aver_pred_proba(test_set_x=X_train_pca_full)
-meta_learner.fit(estimetors_training, y_train_full)
+#We will use the predicted probabilities of the four classifiers on the training set as the features of a meta learner classifier
+ 
+estimators_training = aver_pred_proba(test_set_x=X_train_pca_full)
+meta_learner.fit(estimators_training, y_train_full)
 meta_learner.coef_
-meta_learner.predict_proba(estimators_test)
 estimators_test = aver_pred_proba(test_set_x=X_test_fair_pca)
+
 
 for i in range(50, 99, 1):
     metrics_for_test_set(model=meta_learner, test_set_x=estimators_test, test_set_y=y_test_fair_full, threshold=i / 100)
 
 '''
 for the meta_learner as a logistic regression model with max_iter = 163, solver = 'newton-cholesky', class_weight = {0:1, 1:weight_minoniry_class_full}
+NN the 61acc
 for threshold 0.67
 precision for zero is 0.607 and recall for zero is 0.139 
 precision for one is 0.725 and recall for one is 0.149
@@ -1130,98 +1064,26 @@ percentage of none is 78.3%
 average precision for both classes is 0.666
 average recall for both classes is 0.144
 '''
-#Lastly we will combine all the previous classifiers into one that does hard voting
-
-#Just as model_get_test but will append the class 0 predictions as -1 and the non-confident instances as 0.This is important to implement the hard voter
-def model_gen_test_for_hard_voter(model, test_set, threshold, samples=None):
-    if model == top_mod_NN:
-        #monte carlo method
-        preds = np.stack([model(test_set, training=True) for sample in range(samples)])
-        win_one = preds.mean(axis=0)
-    else:
-         y_probas = model.predict_proba(test_set)
-         win_one = y_probas[:, 1]
-         
-    thres_preds = []
-    for i in range(len(test_set)):
-        if win_one[i] >= (threshold):
-            thres_preds.append(1)
-        if win_one[i] <= (1 - threshold):
-            thres_preds.append(-1)
-        elif ((win_one[i] < (threshold)) and (win_one[i] > (1 - threshold))):
-            thres_preds.append(0)
-    return(thres_preds)
-
-#This function will consider the predictions of our 3 models.It will return the list of the final predictions based on this set of logic
-#If all 3 classifiers predict the same class it will append this class
-#If 2 classifiers predict the same class and the 3rd is not confident enough it will still append this class
-#If 2 classifiers predict the same class and the 3rd predicts the other it will append (-1) etc non-prediction
-#If 1 classifier predict one class and the other 2 are not confident enough it will append non-prediction
-#If none classifier is confident enough it will append non-prediction
-def hard_voter(test_set):
-    RFC_preds = model_gen_test_for_hard_voter(model=top_mod_RFC, test_set=test_set, threshold=0.58 )
-    XGB_preds = model_gen_test_for_hard_voter(model=top_mod_XGB, test_set=test_set, threshold=0.61 )
-    bays_preds = model_gen_test_for_hard_voter(model=bays, test_set=test_set, threshold=0.72 ) 
-    final_preds = []
-    for i in range(len(test_set)):
-        j = RFC_preds[i] + XGB_preds[i] + bays_preds[i]
-        if j > 1.5:
-            final_preds.append(1)
-        if j < (-1.5):
-            final_preds.append(0)
-        elif ((j < 1.5) and (j > (-1.5))):
-            final_preds.append(-1)
-    return final_preds
-
-
-
-def metrics_for_both_classes_hard_voter(test_set_x, test_set_y):
-    preds_test = hard_voter(test_set=test_set_x)
-    predicted_zero = 0
-    predicted_one = 0
-    predicted_none = 0
-    correct_zero = 0
-    correct_one = 0
-    winner_zero = (test_set_y == 0).reset_index()['Winner']
-    winner_one = (test_set_y == 1).reset_index()['Winner']
-    for i in range(len(test_set_x)):
-        if (preds_test[i] == 0):
-            predicted_zero = predicted_zero + 1
-            if winner_zero[i]:
-                correct_zero = correct_zero + 1
-        if (preds_test[i] == 1):
-            predicted_one = predicted_one + 1
-            if winner_one[i]:
-                correct_one = correct_one + 1
-        if (preds_test[i] == -1):
-            predicted_none = predicted_none + 1
-    if predicted_one == 0:
-        predicted_one = 1
-    if predicted_zero == 0:
-        predicted_zero = 1
-    #avoid division by zero
-    precision_zero = correct_zero / predicted_zero
-    recall_zero = correct_zero / winner_zero.sum()
-    precision_one = correct_one / predicted_one
-    recall_one = correct_one / winner_one.sum()
-    percentage_of_none = predicted_none / len(test_set_y)
-    avg_precision = (precision_one + precision_zero) / 2
-    avg_recall = (recall_one + recall_zero) / 2
-    return print(f"precision for zero is {round(precision_zero, 3)} and recall for zero is {round(recall_zero, 3)} \nprecision for one is {round(precision_one, 3)} and recall for one is {round(recall_one, 3)}\npercentage of none is {100 * round(percentage_of_none, 3)}%\naverage precision for both classes is {round(avg_precision, 3)}\naverage recall for both classes is {round(avg_recall, 3)}\n\n")
-
-top_mod_RFC.fit(X_train_pca_full, y_train_full)
-top_mod_XGB.fit(X_train_pca_full, y_train_full)
-bays.fit(X_train_pca_full, y_train_full, sample_weight=class_weight(y_train_full))
-metrics_for_both_classes_hard_voter(test_set_x=X_test_fair_pca, test_set_y=y_test_fair_full)
 '''
-for test_set_x=X_test_fair_pca, test_set_y=y_test_fair_full
-precision for zero is 0.608 and recall for zero is 0.188 
-precision for one is 0.662 and recall for one is 0.121
-percentage of none is 75.4%
-average precision for both classes is 0.635
-average recall for both classes is 0.154
+for the meta_learner as a logistic regression model with max_iter = 163, solver = 'newton-cholesky', class_weight = {0:1, 1:weight_minoniry_class_full}
+NN the third
+for threshold 0.64
+precision for zero is 0.632 and recall for zero is 0.203 
+precision for one is 0.718 and recall for one is 0.131
+percentage of none is 74.8%
+average precision for both classes is 0.675
+average recall for both classes is 0.167
+'''
 
-
+'''
+meta_learner = LogisticRegression(C= 10.0, max_iter= 300, solver= 'liblinear', class_weight = {0:1, 1:1.5})
+NN the 61acc
+for threshold 0.77
+precision for zero is 0.69 and recall for zero is 0.126 
+precision for one is 0.743 and recall for one is 0.134
+percentage of none is 81.89999999999999%
+average precision for both classes is 0.716
+average recall for both classes is 0.13
 '''
 
 
