@@ -917,6 +917,7 @@ def probas_stratify_kfolds(model, x, y, threshold, samples=None):
 #Its time to choose the right balance between precision and recall.I believe that the metric that i should give the most of the weight is precision (the average precision of the two classes)
 #I look at it as a gambler's view.Its way more important that you are more certain about the correct winner than finding the most correct winners, if you are gonna bet for the winner.
 #we will look for over 10% recall.That means for every ufc card (about 15 fights) it will surely give a confident answer
+#On top of that its very important to have similar values of recall for both classes for one threshold.That will be a good indicator that our model is not highly bias to pick one class over the other
 
 #The way to adjust the precision-recall balance is via the threshold value (and the samples for the monte carlo method on the NN).It only makes sense to take values over 0.5 (because the prediction for zero is when this value is under 1 - threshold)
 for i in range(50, 57, 1):
