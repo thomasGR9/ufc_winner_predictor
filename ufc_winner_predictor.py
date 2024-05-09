@@ -1,4 +1,19 @@
 import pandas as pd 
+import pickle
+import numpy as np
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import OneHotEncoder
+import matplotlib.pyplot as plt
+from sklearn.ensemble import RandomForestClassifier
+import math
+import scipy
+from sklearn.preprocessing import StandardScaler
+from sklearn.decomposition import PCA
+from sklearn.pipeline import Pipeline
+from sklearn.compose import ColumnTransformer
+from sklearn.impute import SimpleImputer
+from sklearn.preprocessing import FunctionTransformer
+
 df = pd.read_csv('../../datasets/ufc-master.csv')
 for column in df.columns:
     print(column)
@@ -206,6 +221,8 @@ for j in range(len(mean_list)):
 df5[mean_list[0]].isna().sum()
 df5['sig_str_dif']
 
+df5[mean_list].mean()
+
 
 df5.columns
 df5['Rank_dif'] = df5['B_rank'] - df5['R_rank']
@@ -353,7 +370,7 @@ df5['B_avg_TD_pct'].isna().sum()
 
 
 len(df5.columns)
-import numpy as np
+
 df5.columns
 #the columns we will use to predict the winner have relative importance to the gender and weight of the fighters.To avoid biases we will stratify according to weight_class witch combines the two factors by specifying womans and mans weight class
 df5['weight_class'].value_counts() 
@@ -363,8 +380,8 @@ y = df5['Winner']
 x = df5.drop(['Winner'], axis=1)
 (y == "Red").sum() / (y == "Blue").sum()
 #we came back here to save test and training sets based on stratifying the winner values too
-from sklearn.model_selection import train_test_split
-X_train, X_test, y_train, y_test = train_test_split(x, y, stratify=y, test_size=0.2, shuffle=True)
+
+X_train, X_test, y_train, y_test = train_test_split(x, y, stratify=x['weight_class'], test_size=0.2, shuffle=True)
 (y_train == "Red").sum() / (y_train == "Blue").sum()
 (y_test == "Red").sum() / (y_test == "Blue").sum()
 
@@ -383,7 +400,7 @@ X_test_num = X_test.select_dtypes(include=np.number)
 X_train_num = X_train.select_dtypes(include=np.number)
 X_train_cat['R_Stance'].value_counts()
 
-from sklearn.preprocessing import OneHotEncoder
+
 cat_encoder = OneHotEncoder()
 train_cat_en = cat_encoder.fit_transform(X_train_cat)
 X_train_cat_en = pd.DataFrame(train_cat_en.toarray(), columns=cat_encoder.get_feature_names_out(), index=X_train_cat.index )
@@ -399,7 +416,7 @@ y_test.replace(['Red', 'Blue'], [0, 1], inplace=True)
 
 X_train_num.columns
 #lets handle the numerical columns
-import matplotlib.pyplot as plt
+
 for column in X_train_num.columns:
     X_train_num[column].hist(legend=True)
     plt.show()
@@ -434,7 +451,7 @@ X_test_num.drop(['B_win_by_TKO_Doctor_Stoppage', 'R_win_by_TKO_Doctor_Stoppage']
 X_train_num.drop(['B_win_by_TKO_Doctor_Stoppage', 'R_win_by_TKO_Doctor_Stoppage'], axis=1, inplace=True)
 
 #now we will use some Random Forests to check the feature importance's 
-from sklearn.ensemble import RandomForestClassifier
+
 rnd_clf = RandomForestClassifier(n_estimators=500, random_state=42, max_leaf_nodes=16, class_weight="balanced_subsample")  
 
 rnd_clf.fit(X_train_num, y_train)
@@ -541,8 +558,7 @@ cols_for_iqr = ['B_avg_TD_pct', 'B_Height_cms', 'B_Reach_cms', 'R_avg_TD_pct', '
 #we see that with the iqr method many of the columns have a lot of outliers that we can not exlude,lets try another approach
     
 plot_X_train_num_Chauvenets = X_train_num.copy()
-import math
-import scipy
+
 def mark_outliers_chauvenet(dataset, col, C=2):
     """Finds outliers in the specified column of datatable and adds a binary column with
     the same name extended with '_outlier' that expresses the result per data point.
@@ -735,7 +751,7 @@ for col in remaining_cols_with_tail:
 X_test_num.drop(remaining_cols_with_tail, axis=1, inplace=True)
 
 #Standar scale the dataset
-from sklearn.preprocessing import StandardScaler
+
 std_scaler = StandardScaler()
 X_train_num_scaled_values = std_scaler.fit_transform(X_train_num)
 std_scaler.get_feature_names_out()
@@ -752,7 +768,7 @@ for column in X_train_num_scaled.columns:
 X_train_num_scaled.to_csv('X_train_num_scaled.csv', index=False)
 X_test_num_scaled.to_csv('X_test_num_scaled.csv', index=False)
 '''
-from sklearn.decomposition import PCA
+
 pca = PCA(n_components=0.95)
 X_train_num_scaled_pca_values = pca.fit_transform(X_train_num_scaled)
 pca.n_components_
@@ -792,3 +808,101 @@ datasets that are stratified based on y
 X_train_num_scaled.to_csv('X_train_num_scaled_branch.csv', index=False)
 X_test_num_scaled.to_csv('X_test_num_scaled_branch.csv', index=False)
 '''
+
+X_train_without_pca_full_same_weight_class_ratios= pd.read_csv('./X_train_num_scaled.csv', dtype=np.float64)
+col_names_full = []
+for column in X_train_without_pca_full_same_weight_class_ratios.columns[:26]:
+    col_names_full.append(column)
+col_names_full
+
+
+for col in X_train_without_pca_full_same_weight_class_ratios.columns[26:]:
+    col_names_full.append(col[5:])
+    
+col_names_full
+dif_cols = ['win_streak_dif', 'longest_win_streak_dif', 'win_dif', 'loss_dif', 'total_round_dif', 'ko_dif', 'sub_dif', 'height_dif', 'reach_dif', 'age_dif', 'sig_str_dif', 'avg_sub_att_dif', 'avg_td_dif', 'Rank_dif']
+sqrt_cols = ['B_avg_SIG_STR_landed', 'B_avg_TD_landed', 'B_longest_win_streak', 'B_total_rounds_fought', 'B_wins', 'R_avg_SIG_STR_landed', 'R_avg_TD_landed', 'R_longest_win_streak', 'R_total_rounds_fought', 'R_wins']
+cbrt_cols = ['B_current_win_streak', 'B_avg_SUB_ATT', 'B_losses', 'R_current_win_streak', 'R_avg_SUB_ATT', 'R_losses']
+sq_cb_cols = sqrt_cols + cbrt_cols
+
+
+
+
+imputer_dif = SimpleImputer(strategy="constast", fill_value=0)
+imputer_sqrt = SimpleImputer(strategy="mean")
+
+imputer_sqrt.fit(df[sq_cb_cols])
+
+
+sqrt_transformer = FunctionTransformer(np.sqrt, inverse_func=np.square)
+
+
+diff_pipeline = Pipeline([
+    ("impute", imputer_dif)
+])
+
+sqrt_pipeline = Pipeline([
+    ("impute", imputer_sqrt),
+    ("sqrt", sqrt_transformer)
+])
+
+
+
+Column_trans = ColumnTransformer([
+    ("dif", diff_pipeline(), dif_cols),
+    ("sqrt", sqrt_pipeline(), sq_cb_cols)
+])
+
+standar_pca_pipeline = Pipeline([
+    ("StandarScaler", std_scaler),
+    ("PCA", pca)
+])
+
+
+
+def preprocessing(X_test):
+    X_test['B_rank'].fillna(16, inplace=True)
+    X_test['R_rank'].fillna(16, inplace=True)
+    X_test['Rank_dif'] = X_test['B_rank'] - X_test['R_rank']
+    
+    mixed_dif = ['loss_dif', 'ko_dif', 'height_dif', 'reach_dif', 'age_dif', 'sig_str_dif', 'avg_sub_att_dif', 'avg_td_dif']
+    mixed_B = ['B_losses', 'B_win_by_KO/TKO', 'B_Height_cms', 'B_Reach_cms', 'B_age', 'B_avg_SIG_STR_landed', 'B_avg_SUB_ATT', 'B_avg_TD_landed']
+    mixed_R = ['R_losses', 'R_win_by_KO/TKO', 'R_Height_cms', 'R_Reach_cms', 'R_age', 'R_avg_SIG_STR_landed', 'R_avg_SUB_ATT', 'R_avg_TD_landed']
+    cols_in_order = ['B_avg_SIG_STR_pct', 'B_avg_TD_pct', 'B_win_by_Decision_Split', 'B_Height_cms', 'B_Reach_cms', 'R_avg_SIG_STR_pct', 'R_avg_TD_pct', 'R_win_by_Decision_Split', 'R_Height_cms', 'R_Reach_cms', 'R_age', 'B_age', 'win_streak_dif', 'longest_win_streak_dif', 'win_dif', 'loss_dif', 'total_round_dif', 'ko_dif', 'sub_dif', 'height_dif', 'reach_dif', 'age_dif', 'sig_str_dif', 'avg_sub_att_dif', 'avg_td_dif', 'Rank_dif', 'sqrt_B_avg_SIG_STR_landed', 'sqrt_B_avg_TD_landed', 'sqrt_B_longest_win_streak', 'sqrt_B_total_rounds_fought', 'sqrt_B_wins', 'sqrt_R_avg_SIG_STR_landed', 'sqrt_R_avg_TD_landed', 'sqrt_R_longest_win_streak', 'sqrt_R_total_rounds_fought', 'sqrt_R_wins', 'cbrt_B_current_win_streak', 'cbrt_B_avg_SUB_ATT', 'cbrt_B_losses', 'cbrt_R_current_win_streak', 'cbrt_R_avg_SUB_ATT', 'cbrt_R_losses']
+    for j in range(len(mixed_dif)):
+        for i in range(X_test.shape[0]):
+            if ~(X_test[mixed_B[j]] - X_test[mixed_R[j]] == X_test[mixed_dif[j]])[i]:
+                X_test[mixed_dif[j]][i] = X_test[mixed_B[j]][i] - X_test[mixed_R[j]][i] 
+    
+    X_test_prepared = Column_trans.transform(X_test)
+    X_test_prepared_df = pd.DataFrame(X_test_prepared, columns=Column_trans.get_feature_names_out(), index=X_test.index)
+    
+    for col in sqrt_cols:
+        X_test_prepared_df['sqrt_'+col] = X_test_prepared_df[col]
+    X_test_prepared_df.drop(sqrt_cols, axis=1, inplace=True)
+    
+    for col in cbrt_cols:
+        X_test_prepared_df['cbrt_'+col] = X_test_prepared_df[col]
+    X_test_prepared_df.drop(sqrt_cols, axis=1, inplace=True)
+    
+    X_test_prepared_df = X_test_prepared_df[cols_in_order]
+    X_final = standar_pca_pipeline.transform(X_test_prepared_df)
+    X_final_df = pd.DataFrame(X_final, columns=standar_pca_pipeline.get_feature_names_out(), index=X_test_prepared_df.index)
+    return X_final_df
+    
+    
+        
+    
+    
+    
+
+
+
+    
+
+
+
+
+
+    
+    
