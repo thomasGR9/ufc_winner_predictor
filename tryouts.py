@@ -32,6 +32,7 @@ import lightgbm as lgb
 from sklearn.linear_model import LogisticRegression
 import keras_tuner as kt
 from sklearn.calibration import CalibratedClassifierCV
+import pickle
 dataset_choice = "same_weight_class_ratios" #Choose between "same_weight_class_ratios" or "same_y_ratios"
 
 def training_test_sets(dataset_ch):
@@ -1024,6 +1025,17 @@ top_mod_RFC.fit(X_train_pca_full, y_train_full)
 top_mod_XGB.fit(X_train_pca_full, y_train_full)
 bayes.fit(X_train_pca_full, y_train_full, sample_weight=class_weight(y_train_full))
 
+with open('top_mod_RFC.pkl','wb') as f:
+    pickle.dump(top_mod_RFC, f)
+
+with open('top_mod_XGB.pkl','wb') as f:
+    pickle.dump(top_mod_XGB, f)
+
+with open('bayes.pkl','wb') as f:
+    pickle.dump(bayes, f)
+
+
+
 #will return a print of the metrics of a model on a test set
 def metrics_for_test_set(model, test_set_x, test_set_y, threshold, samples=None):
     precision_zero, precision_one, recall_zero, recall_one, percentage_of_none = metrics_for_both_classes(model = model, test_set_x = test_set_x, test_set_y = test_set_y, threshold= threshold, samples=samples)
@@ -1048,12 +1060,27 @@ def aver_pred_proba(test_set_x):
  
 estimators_training = aver_pred_proba(test_set_x=X_train_pca_full)
 meta_learner.fit(estimators_training, y_train_full)
+
+with open('meta_learner.pkl','wb') as f:
+    pickle.dump(meta_learner, f)
+
 meta_learner.coef_
 estimators_test = aver_pred_proba(test_set_x=X_test_fair_pca)
-
+preds = meta_learner.predict_proba(estimators_test)
+winner_blue_corner_proba = preds[:, 1]
+round(winner_blue_corner_proba[0], 2)
+'''
+Saving the essential datasets
+estimators_training.to_csv('estimators_training.csv', index=False)
+X_train_pca_full.to_csv('X_train_pca_full.csv', index=False)
+y_train_full.to_csv('y_train_full.csv', index=False)
+estimators_test.to_csv('estimators_test.csv', index=False)
+X_test_fair_pca.to_csv('X_test_fair_pca.csv', index=False)
+y_test_fair_full.to_csv('y_test_fair_full.csv', index=False)
+'''
 
 for i in range(50, 99, 1):
-    metrics_for_test_set(model=meta_learner, test_set_x=estimators_test, test_set_y=y_test_fair_full, threshold=i / 100)
+    metrics_for_test_set(model=meta_learner, test_set_x=estimators_test, test_set_y=y_test_fair_full, threshold= i / 100)
 
 '''
 for the meta_learner as a logistic regression model with max_iter = 163, solver = 'newton-cholesky', class_weight = {0:1, 1:weight_minoniry_class_full}
@@ -1088,5 +1115,51 @@ average recall for both classes is 0.13
 '''
 
 
+avg_precisions = [0.584, 0.588, 0.593, 0.595, 0.59, 0.601, 0.601, 0.599, 0.591, 0.592, 0.595, 0.597, 0.601, 0.611, 0.613, 0.606, 0.602, 0.614, 0.62, 0.621, 0.625, 0.627, 0.639, 0.655, 0.661, 0.688, 0.705, 0.716, 0.708, 0.705, 0.711, 0.741, 0.711, 0.741, 0.836, 0.875, 0.868, 0.885]
 
+Threshold_prec_dict= {}
 
+for i in range(50, 88, 1):
+    Threshold_prec_dict[i / 100] = avg_precisions[i - 50]
+    
+Threshold_prec_dict
+
+'''
+{0.5: 0.584,
+ 0.51: 0.588,
+ 0.52: 0.593,
+ 0.53: 0.595,
+ 0.54: 0.59,
+ 0.55: 0.601,
+ 0.56: 0.601,
+ 0.57: 0.599,
+ 0.58: 0.591,
+ 0.59: 0.592,
+ 0.6: 0.595,
+ 0.61: 0.597,
+ 0.62: 0.601,
+ 0.63: 0.611,
+ 0.64: 0.613,
+ 0.65: 0.606,
+ 0.66: 0.602,
+ 0.67: 0.614,
+ 0.68: 0.62,
+ 0.69: 0.621,
+ 0.7: 0.625,
+ 0.71: 0.627,
+ 0.72: 0.639,
+ 0.73: 0.655,
+ 0.74: 0.661,
+ 0.75: 0.688,
+ 0.76: 0.705,
+ 0.77: 0.716,
+ 0.78: 0.708,
+ 0.79: 0.705,
+ 0.8: 0.711,
+ 0.81: 0.741,
+ 0.82: 0.711,
+ 0.83: 0.741,
+ 0.84: 0.836,
+ 0.85: 0.875,
+ 0.86: 0.868,
+ 0.87: 0.885}

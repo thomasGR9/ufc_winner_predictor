@@ -50,8 +50,9 @@ print(f'percentage of the dataset that fights have ranked fighters is: {(l/df2.s
 
 
 
-
+[col for col in df2.iloc[:, 68:79].columns]
 ~df2.iloc[:, 68:79].isna().iloc[0]
+~df2.isna().iloc[0]['B_Flyweight_rank']
 #We have a column for every weight class and True-False statements on where the fighters are
 R_Series = []
 for j in range(df2.shape[0]):
@@ -810,6 +811,8 @@ X_test_num_scaled.to_csv('X_test_num_scaled_branch.csv', index=False)
 '''
 
 X_train_without_pca_full_same_weight_class_ratios= pd.read_csv('./X_train_num_scaled.csv', dtype=np.float64)
+for col in X_train_without_pca_full_same_weight_class_ratios.columns:
+    print(col)
 col_names_full = []
 for column in X_train_without_pca_full_same_weight_class_ratios.columns[:26]:
     col_names_full.append(column)
@@ -824,17 +827,19 @@ dif_cols = ['win_streak_dif', 'longest_win_streak_dif', 'win_dif', 'loss_dif', '
 sqrt_cols = ['B_avg_SIG_STR_landed', 'B_avg_TD_landed', 'B_longest_win_streak', 'B_total_rounds_fought', 'B_wins', 'R_avg_SIG_STR_landed', 'R_avg_TD_landed', 'R_longest_win_streak', 'R_total_rounds_fought', 'R_wins']
 cbrt_cols = ['B_current_win_streak', 'B_avg_SUB_ATT', 'B_losses', 'R_current_win_streak', 'R_avg_SUB_ATT', 'R_losses']
 sq_cb_cols = sqrt_cols + cbrt_cols
+rest_cols = ['B_avg_SIG_STR_pct', 'B_avg_TD_pct', 'B_win_by_Decision_Split', 'B_Height_cms', 'B_Reach_cms', 'R_avg_SIG_STR_pct', 'R_avg_TD_pct', 'R_win_by_Decision_Split', 'R_Height_cms', 'R_Reach_cms', 'R_age', 'B_age']
 
 
 
 
-imputer_dif = SimpleImputer(strategy="constast", fill_value=0)
+imputer_dif = SimpleImputer(strategy="constant", fill_value=0)
 imputer_sqrt = SimpleImputer(strategy="mean")
+imputer_rest = SimpleImputer(strategy="mean")
 
-imputer_sqrt.fit(df[sq_cb_cols])
 
 
-sqrt_transformer = FunctionTransformer(np.sqrt, inverse_func=np.square)
+
+sqrt_transformer = FunctionTransformer(np.sqrt, inverse_func=np.square, feature_names_out= 'one-to-one')
 
 
 diff_pipeline = Pipeline([
@@ -846,53 +851,113 @@ sqrt_pipeline = Pipeline([
     ("sqrt", sqrt_transformer)
 ])
 
-
-
-Column_trans = ColumnTransformer([
-    ("dif", diff_pipeline(), dif_cols),
-    ("sqrt", sqrt_pipeline(), sq_cb_cols)
+rest_pipeline = Pipeline([
+    ("impute", imputer_rest)
 ])
 
+Column_trans = ColumnTransformer([
+    ("dif", diff_pipeline, dif_cols),
+    ("sqrt", sqrt_pipeline, sq_cb_cols),
+    ("rest", rest_pipeline, rest_cols)
+], 
+verbose_feature_names_out=False)
+
+Column_trans.fit(df5[col_names_full])
+
+with open('Colum_transf.pkl','wb') as f:
+    pickle.dump(Column_trans, f)
+    
 standar_pca_pipeline = Pipeline([
     ("StandarScaler", std_scaler),
     ("PCA", pca)
 ])
 
+with open('standar_pca_pipe.pkl','wb') as f:
+    pickle.dump(standar_pca_pipeline, f)
 
+R_weight_classes = ["R_Women's Featherweight_rank", "R_Women's Strawweight_rank", "R_Women's Bantamweight_rank", 'R_Heavyweight_rank', 'R_Light Heavyweight_rank', 'R_Middleweight_rank', 'R_Welterweight_rank', 'R_Lightweight_rank', 'R_Featherweight_rank', 'R_Bantamweight_rank', 'R_Flyweight_rank']
+B_weight_classes = ["B_Women's Featherweight_rank", "B_Women's Strawweight_rank", "B_Women's Bantamweight_rank", 'B_Heavyweight_rank', 'B_Light Heavyweight_rank', 'B_Middleweight_rank', 'B_Welterweight_rank', 'B_Lightweight_rank', 'B_Featherweight_rank', 'B_Bantamweight_rank', 'B_Flyweight_rank']
+mixed_dif = ['loss_dif', 'ko_dif', 'height_dif', 'reach_dif', 'age_dif', 'sig_str_dif', 'avg_sub_att_dif', 'avg_td_dif', 'win_streak_dif', 'longest_win_streak_dif', 'win_dif', 'total_round_dif', 'sub_dif']
+mixed_B = ['B_losses', 'B_win_by_KO/TKO', 'B_Height_cms', 'B_Reach_cms', 'B_age', 'B_avg_SIG_STR_landed', 'B_avg_SUB_ATT', 'B_avg_TD_landed', 'B_current_win_streak', 'B_longest_win_streak', 'B_wins', 'B_total_rounds_fought', 'B_win_by_Submission']
+mixed_R = ['R_losses', 'R_win_by_KO/TKO', 'R_Height_cms', 'R_Reach_cms', 'R_age', 'R_avg_SIG_STR_landed', 'R_avg_SUB_ATT', 'R_avg_TD_landed', 'R_current_win_streak', 'R_longest_win_streak', 'R_wins', 'R_total_rounds_fought', 'R_win_by_Submission']
+cols_in_order = ['B_avg_SIG_STR_pct', 'B_avg_TD_pct', 'B_win_by_Decision_Split', 'B_Height_cms', 'B_Reach_cms', 'R_avg_SIG_STR_pct', 'R_avg_TD_pct', 'R_win_by_Decision_Split', 'R_Height_cms', 'R_Reach_cms', 'R_age', 'B_age', 'win_streak_dif', 'longest_win_streak_dif', 'win_dif', 'loss_dif', 'total_round_dif', 'ko_dif', 'sub_dif', 'height_dif', 'reach_dif', 'age_dif', 'sig_str_dif', 'avg_sub_att_dif', 'avg_td_dif', 'Rank_dif', 'sqrt_B_avg_SIG_STR_landed', 'sqrt_B_avg_TD_landed', 'sqrt_B_longest_win_streak', 'sqrt_B_total_rounds_fought', 'sqrt_B_wins', 'sqrt_R_avg_SIG_STR_landed', 'sqrt_R_avg_TD_landed', 'sqrt_R_longest_win_streak', 'sqrt_R_total_rounds_fought', 'sqrt_R_wins', 'cbrt_B_current_win_streak', 'cbrt_B_avg_SUB_ATT', 'cbrt_B_losses', 'cbrt_R_current_win_streak', 'cbrt_R_avg_SUB_ATT', 'cbrt_R_losses']
+sqrt_cols = ['B_avg_SIG_STR_landed', 'B_avg_TD_landed', 'B_longest_win_streak', 'B_total_rounds_fought', 'B_wins', 'R_avg_SIG_STR_landed', 'R_avg_TD_landed', 'R_longest_win_streak', 'R_total_rounds_fought', 'R_wins']
+cbrt_cols = ['B_current_win_streak', 'B_avg_SUB_ATT', 'B_losses', 'R_current_win_streak', 'R_avg_SUB_ATT', 'R_losses']
 
-def preprocessing(X_test):
-    X_test['B_rank'].fillna(16, inplace=True)
-    X_test['R_rank'].fillna(16, inplace=True)
-    X_test['Rank_dif'] = X_test['B_rank'] - X_test['R_rank']
+def preprocessing(New_data):
+    New_data.reset_index(drop=True, inplace=True)
+    R_Series = []
+    B_Series = []
+    for j in range(New_data.shape[0]):
+        R_Series.append(16)
+        B_Series.append(16)
     
-    mixed_dif = ['loss_dif', 'ko_dif', 'height_dif', 'reach_dif', 'age_dif', 'sig_str_dif', 'avg_sub_att_dif', 'avg_td_dif']
-    mixed_B = ['B_losses', 'B_win_by_KO/TKO', 'B_Height_cms', 'B_Reach_cms', 'B_age', 'B_avg_SIG_STR_landed', 'B_avg_SUB_ATT', 'B_avg_TD_landed']
-    mixed_R = ['R_losses', 'R_win_by_KO/TKO', 'R_Height_cms', 'R_Reach_cms', 'R_age', 'R_avg_SIG_STR_landed', 'R_avg_SUB_ATT', 'R_avg_TD_landed']
-    cols_in_order = ['B_avg_SIG_STR_pct', 'B_avg_TD_pct', 'B_win_by_Decision_Split', 'B_Height_cms', 'B_Reach_cms', 'R_avg_SIG_STR_pct', 'R_avg_TD_pct', 'R_win_by_Decision_Split', 'R_Height_cms', 'R_Reach_cms', 'R_age', 'B_age', 'win_streak_dif', 'longest_win_streak_dif', 'win_dif', 'loss_dif', 'total_round_dif', 'ko_dif', 'sub_dif', 'height_dif', 'reach_dif', 'age_dif', 'sig_str_dif', 'avg_sub_att_dif', 'avg_td_dif', 'Rank_dif', 'sqrt_B_avg_SIG_STR_landed', 'sqrt_B_avg_TD_landed', 'sqrt_B_longest_win_streak', 'sqrt_B_total_rounds_fought', 'sqrt_B_wins', 'sqrt_R_avg_SIG_STR_landed', 'sqrt_R_avg_TD_landed', 'sqrt_R_longest_win_streak', 'sqrt_R_total_rounds_fought', 'sqrt_R_wins', 'cbrt_B_current_win_streak', 'cbrt_B_avg_SUB_ATT', 'cbrt_B_losses', 'cbrt_R_current_win_streak', 'cbrt_R_avg_SUB_ATT', 'cbrt_R_losses']
+    for j in range(New_data.shape[0]):
+        for column in R_weight_classes:
+            if ~New_data.isna().iloc[j][column]:
+                R_Series[j] = New_data.iloc[j][column]
+    
+    for j in range(New_data.shape[0]):
+        for column in B_weight_classes:
+            if ~New_data.isna().iloc[j][column]:
+                B_Series[j] = New_data.iloc[j][column]
+
+    New_data['R_rank'] = R_Series
+    New_data['B_rank'] = B_Series
+    New_data['B_rank'].replace(0, 16, inplace=True)
+    New_data['R_rank'].replace(0, 16, inplace=True)
+    
+    New_data['Rank_dif'] = New_data['B_rank'] - New_data['R_rank']
+    New_data.drop(["R_rank" ,"B_rank"], axis=1, inplace=True)
+    
+    
     for j in range(len(mixed_dif)):
-        for i in range(X_test.shape[0]):
-            if ~(X_test[mixed_B[j]] - X_test[mixed_R[j]] == X_test[mixed_dif[j]])[i]:
-                X_test[mixed_dif[j]][i] = X_test[mixed_B[j]][i] - X_test[mixed_R[j]][i] 
+        for i in range(New_data.shape[0]):
+            if ~(New_data[mixed_B[j]] - New_data[mixed_R[j]] == New_data[mixed_dif[j]])[i]:
+                New_data[mixed_dif[j]][i] = New_data[mixed_B[j]][i] - New_data[mixed_R[j]][i] 
     
-    X_test_prepared = Column_trans.transform(X_test)
-    X_test_prepared_df = pd.DataFrame(X_test_prepared, columns=Column_trans.get_feature_names_out(), index=X_test.index)
+    New_data_prepared = Column_trans.transform(New_data)
+    New_data_prepared_df = pd.DataFrame(New_data_prepared, columns=Column_trans.get_feature_names_out(), index=New_data.index)
     
+   
     for col in sqrt_cols:
-        X_test_prepared_df['sqrt_'+col] = X_test_prepared_df[col]
-    X_test_prepared_df.drop(sqrt_cols, axis=1, inplace=True)
+        New_data_prepared_df['sqrt_'+col] = New_data_prepared_df[col]
+    
+    
+    
+    New_data_prepared_df.drop(['B_avg_SIG_STR_landed', 'B_avg_TD_landed', 'B_longest_win_streak', 'B_total_rounds_fought', 'B_wins', 'R_avg_SIG_STR_landed', 'R_avg_TD_landed', 'R_longest_win_streak', 'R_total_rounds_fought', 'R_wins'], axis=1, inplace=True)
     
     for col in cbrt_cols:
-        X_test_prepared_df['cbrt_'+col] = X_test_prepared_df[col]
-    X_test_prepared_df.drop(sqrt_cols, axis=1, inplace=True)
+        New_data_prepared_df['cbrt_'+col] = New_data_prepared_df[col]
+        
+    New_data_prepared_df.drop(['B_current_win_streak', 'B_avg_SUB_ATT', 'B_losses', 'R_current_win_streak', 'R_avg_SUB_ATT', 'R_losses'], axis=1, inplace=True)
     
-    X_test_prepared_df = X_test_prepared_df[cols_in_order]
-    X_final = standar_pca_pipeline.transform(X_test_prepared_df)
-    X_final_df = pd.DataFrame(X_final, columns=standar_pca_pipeline.get_feature_names_out(), index=X_test_prepared_df.index)
+    
+    
+    New_data_prepared_df = New_data_prepared_df[cols_in_order]
+    X_final = standar_pca_pipeline.transform(New_data_prepared_df)
+    X_final_df = pd.DataFrame(X_final, columns=standar_pca_pipeline.get_feature_names_out(), index=New_data.index)
     return X_final_df
     
     
-        
-    
+j = 0
+k = 0
+for i in range(df1.shape[0]):
+    if (preprocessing(df1[i:(i+1)]).shape[1] == 23):
+        j = j +1
+    else:
+        k = k + 1
+print(j)
+#4896 so every instance would have 23 pca features just as we want it
+print(k)
+#0
+
+
+prepro_data = preprocessing(df1)
+
+
+
+
     
     
 
