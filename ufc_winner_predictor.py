@@ -13,6 +13,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import FunctionTransformer
+import re
 
 df = pd.read_csv('../../datasets/ufc-master.csv')
 for column in df.columns:
@@ -875,6 +876,8 @@ standar_pca_pipeline = Pipeline([
 with open('standar_pca_pipe.pkl','wb') as f:
     pickle.dump(standar_pca_pipeline, f)
 
+
+
 R_weight_classes = ["R_Women's Featherweight_rank", "R_Women's Strawweight_rank", "R_Women's Bantamweight_rank", 'R_Heavyweight_rank', 'R_Light Heavyweight_rank', 'R_Middleweight_rank', 'R_Welterweight_rank', 'R_Lightweight_rank', 'R_Featherweight_rank', 'R_Bantamweight_rank', 'R_Flyweight_rank']
 B_weight_classes = ["B_Women's Featherweight_rank", "B_Women's Strawweight_rank", "B_Women's Bantamweight_rank", 'B_Heavyweight_rank', 'B_Light Heavyweight_rank', 'B_Middleweight_rank', 'B_Welterweight_rank', 'B_Lightweight_rank', 'B_Featherweight_rank', 'B_Bantamweight_rank', 'B_Flyweight_rank']
 mixed_dif = ['loss_dif', 'ko_dif', 'height_dif', 'reach_dif', 'age_dif', 'sig_str_dif', 'avg_sub_att_dif', 'avg_td_dif', 'win_streak_dif', 'longest_win_streak_dif', 'win_dif', 'total_round_dif', 'sub_dif']
@@ -957,17 +960,131 @@ prepro_data = preprocessing(df1)
 
 
 
+essential_cols_1 = sq_cb_cols + rest_cols + mixed_B + mixed_R + mixed_dif + R_weight_classes + B_weight_classes
+essential_cols = list(set(essential_cols_1))
+essential_cols.append("R_fighter")
+essential_cols.append("B_fighter")
+df_ess = df[essential_cols]
+df_ess
+df_R_1 = df_ess.copy()
+df_R_1['B_fighter'].unique()
 
+fighters_unique_in_red_not_in_blue = []
+for fighter in df['R_fighter'].unique():
+    if fighter not in df['B_fighter'].unique():
+        fighters_unique_in_red_not_in_blue.append(fighter)
+
+len(fighters_unique_in_red_not_in_blue)
+fighters_unique_in_blue = []
+for fighter in df['B_fighter'].unique():
+    fighters_unique_in_blue.append(fighter)
+    
+fighters_unique_in_blue
+
+unique_fighters_names = fighters_unique_in_blue + fighters_unique_in_red_not_in_blue
+
+
+
+ids_of_reds = []
+names = []
+
+for index in df_R_1.index:
+    if ((df_R_1['R_fighter'][index] in fighters_unique_in_red_not_in_blue) and (df_R_1['R_fighter'][index] not in names)):
+        names.append(df_R_1['R_fighter'][index])
+        ids_of_reds.append(index)
+
+
+len(ids_of_reds)
+len(names)
+
+R_cols = []
+
+for col in df_R_1.columns:
+    if col.startswith('R'):
+        R_cols.append(col)
+        
+B_cols = []
+
+for col in df_R_1.columns:
+    if col.startswith('B'):
+        B_cols.append(col)
+     
+len(R_cols)   
+df_R = df_R_1.iloc[ids_of_reds][R_cols].reset_index(drop=True)
+df_R.columns
+
+columns_without_R = [col.replace('R_', '', 1) for col in df_R.columns]
+renaming = {}
+for i in range(df_R.shape[1]):
+    renaming[df_R.columns[i]] = columns_without_R[i]
+
+renaming
+
+df_R = df_R.rename(columns=renaming)
+df_R
+
+df_B_1 = df_ess.copy()
+
+ids_of_blues = []
+names_B = []
+
+for index in df_B_1.index:
+    if ((df_B_1['B_fighter'][index] in fighters_unique_in_blue) and (df_B_1['B_fighter'][index] not in names_B)):
+        names_B.append(df_B_1['B_fighter'][index])
+        ids_of_blues.append(index)
+
+
+len(ids_of_blues)
+len(names_B)
+
+B_cols = []
+
+for col in df_B_1.columns:
+    if col.startswith('B'):B_cols
+        B_cols.append(col)
+        
+
+len(B_cols)   
+df_B = df_B_1.iloc[ids_of_blues][B_cols].reset_index(drop=True)
+df_B.columns
+
+columns_without_B = [col.replace('B_', '', 1) for col in df_B.columns]
+renaming_B = {}
+for i in range(df_B.shape[1]):
+    renaming_B[df_B.columns[i]] = columns_without_B[i]
+
+renaming_B
+
+df_B = df_B.rename(columns=renaming_B)
+df_B
+
+unique_fighters_stats = pd.concat([df_R, df_B], ignore_index=True) 
+
+lower_case = unique_fighters_stats['fighter'].map(lambda x: x.lower() if isinstance(x,str) else x)
+re.sub(r'[^\w]', ' ', s)
+remove_symbols = lower_case.map(lambda x: re.sub(r'[^\w]', ' ', x))
+remove_spaces = remove_symbols.str.replace(" ", "")
+
+unique_fighters_stats['fighter'] = remove_spaces
+unique_fighters_stats
+
+unique_fighters_stats.to_csv('unique_fighters_stats.csv', index=False)
+
+def X_from_names(red_corner_name, blue_corner_name):
+    red_name_adj = re.sub(r'[^\w]', ' ', red_corner_name.lower()).replace(" ", "")
+    blue_name_adj = re.sub(r'[^\w]', ' ', blue_corner_name.lower()).replace(" ", "")
+    print(red_name_adj)
+    if (red_name_adj in list(unique_fighters_stats['fighter'])):
+        R_frame = unique_fighters_stats[unique_fighters_stats['fighter'] == red_name_adj]
+        R_frame_adj = R_frame.add_prefix('R_')
+        
+    if (blue_name_adj in list(unique_fighters_stats['fighter'])):
+        B_frame = unique_fighters_stats[unique_fighters_stats['fighter'] == blue_name_adj]
+        B_frame_adj = B_frame.add_prefix('B_')
     
     
+        
+        
 
 
-
-    
-
-
-
-
-
-    
-    
+unique_fighters_stats
