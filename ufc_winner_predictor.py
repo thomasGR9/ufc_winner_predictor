@@ -1068,23 +1068,145 @@ remove_spaces = remove_symbols.str.replace(" ", "")
 unique_fighters_stats['fighter'] = remove_spaces
 unique_fighters_stats
 
-unique_fighters_stats.to_csv('unique_fighters_stats.csv', index=False)
+#unique_fighters_stats.to_csv('unique_fighters_stats.csv', index=False)
+unique_fighters_stats = pd.read_csv("./unique_fighters_stats.csv")
+
+uniqueList = []
+duplicateList = []
+ 
+for i in list(unique_fighters_stats['fighter']):
+    if i not in uniqueList:
+        uniqueList.append(i)
+    elif i not in duplicateList:
+        duplicateList.append(i)
+
+duplicateList
+
+
+for dupl_fight in duplicateList:
+    print(len(unique_fighters_stats[unique_fighters_stats['fighter'] == dupl_fight]))
+    
+#somehow there are 7 dublicates
+
+list_of_dub_idx = []
+
+for fighter in duplicateList:
+    list_of_dub_idx.append(unique_fighters_stats[unique_fighters_stats['fighter'] == fighter].index[0])
+    
+list_of_dub_idx
+
+unique_fighters_stats_final = unique_fighters_stats.drop(list_of_dub_idx, axis=0)
+#unique_fighters_stats_final.to_csv('unique_fighters_stats_final.csv', index=False)
+
+uniqueList_final = []
+duplicateList_final = []
+ 
+for i in list(unique_fighters_stats_final['fighter']):
+    if i not in uniqueList_final:
+        uniqueList_final.append(i)
+    elif i not in duplicateList_final:
+        duplicateList_final.append(i)
+
+duplicateList_final
+#Solved
+
+ids_of_reds_final = [x for x in ids_of_reds if (x not in list_of_dub_idx)]
+ids_of_blues_final = [x for x in ids_of_blues if (x not in list_of_dub_idx)]
+
+for val in df['R_Weight_lbs'].unique():
+    print(val)
+
+weights = [115, 125, 135, 145, 155, 170, 185, 205, 265]
+df_unique_red = df.iloc[ids_of_reds_final]
+df_unique_red = df_unique_red.reset_index(drop=True)
+df_unique_red.loc[(df_unique_red['R_Weight_lbs'] > 206), 'R_Weight_lbs']  = 265
+df_unique_blue = df.iloc[ids_of_blues_final]
+df_unique_blue = df_unique_blue.reset_index(drop=True)
+df_unique_blue.loc[(df_unique_blue['B_Weight_lbs'] > 206), 'B_Weight_lbs']  = 265
+list(df_unique_red[df_unique_red['R_Weight_lbs'] == 115]['R_fighter'])
+dict_of_weights = {115 : [], 125: [], 135: [], 145: [], 155: [], 170: [], 185: [], 205: [], 265: []}
+for weight in weights:
+    for fighter in list(df_unique_red[df_unique_red['R_Weight_lbs'] == weight]['R_fighter']):
+        dict_of_weights[weight].append(fighter)
+
+for weight in weights:
+    for fighter in list(df_unique_blue[df_unique_blue['B_Weight_lbs'] == weight]['B_fighter']):
+        dict_of_weights[weight].append(fighter)        
+
+dict_of_weights
+dict_copy = dict_of_weights
+dict_of_weights_final_1 = {115 : [], 125: [], 135: [], 145: [], 155: [], 170: [], 185: [], 205: [], 265: []}
+for weight in dict_copy:
+   dict_of_weights_final_1[weight].append([re.sub(r'[^\w]', ' ', x.lower()).replace(" ", "") for x in dict_of_weights[weight]])
+
+for weight in dict_of_weights_final_1:
+    dict_of_weights_final_1[weight] = dict_of_weights_final_1[weight][0]
+
+dict_of_weights_final_1
+
+check_num = 0
+for weight in dict_of_weights_final_1:
+    check_num = check_num + len(dict_of_weights_final_1[weight])
+
+check_num
+
+
+
+uniqueList = []
+duplicateList = []
+ 
+for weight in dict_of_weights_final_1:
+    for i in dict_of_weights_final_1[weight]:
+        if i not in uniqueList:
+            uniqueList.append(i)
+        elif i not in duplicateList:
+            duplicateList.append(i)
+
+duplicateList
+
+
+
 
 def X_from_names(red_corner_name, blue_corner_name):
+
     red_name_adj = re.sub(r'[^\w]', ' ', red_corner_name.lower()).replace(" ", "")
     blue_name_adj = re.sub(r'[^\w]', ' ', blue_corner_name.lower()).replace(" ", "")
-    print(red_name_adj)
+
+    for pos_weight in dict_of_weights_final_1:
+        for name in dict_of_weights_final_1[pos_weight]:
+            if name == red_name_adj:
+                red_weight = pos_weight  
+    
+    if blue_name_adj not in dict_of_weights_final_1[red_weight]:
+        return print("The fighters are not in the same weight class") 
+
+    if ((red_name_adj not in list(unique_fighters_stats['fighter'])) and (blue_name_adj not in list(unique_fighters_stats['fighter']))):
+        return print("Both given names are not in the list")
+    if red_name_adj not in list(unique_fighters_stats['fighter']):
+        return print("The name given in the red corner is not in the list")
+    if blue_name_adj not in list(unique_fighters_stats['fighter']):
+        return print("The name given in the blue corner is not in the list")  
+    
+    if red_name_adj == blue_name_adj:
+        return print("You gave the same name in both corners") 
+    
+    
+    
     if (red_name_adj in list(unique_fighters_stats['fighter'])):
         R_frame = unique_fighters_stats[unique_fighters_stats['fighter'] == red_name_adj]
         R_frame_adj = R_frame.add_prefix('R_')
-        
+        R_frame_adj = R_frame_adj.reset_index(drop=True)
+   
+       
     if (blue_name_adj in list(unique_fighters_stats['fighter'])):
         B_frame = unique_fighters_stats[unique_fighters_stats['fighter'] == blue_name_adj]
         B_frame_adj = B_frame.add_prefix('B_')
+        B_frame_adj = B_frame_adj.reset_index(drop=True)
+
+        
+    X_without_pre = pd.merge(R_frame_adj, B_frame_adj, left_index=True, right_index=True)
+    return X_without_pre
     
     
-        
-        
+X_from_names('caludiagadelha', 'jessicaandrade')
 
-
-unique_fighters_stats
