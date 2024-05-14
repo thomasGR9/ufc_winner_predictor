@@ -887,6 +887,7 @@ cols_in_order = ['B_avg_SIG_STR_pct', 'B_avg_TD_pct', 'B_win_by_Decision_Split',
 sqrt_cols = ['B_avg_SIG_STR_landed', 'B_avg_TD_landed', 'B_longest_win_streak', 'B_total_rounds_fought', 'B_wins', 'R_avg_SIG_STR_landed', 'R_avg_TD_landed', 'R_longest_win_streak', 'R_total_rounds_fought', 'R_wins']
 cbrt_cols = ['B_current_win_streak', 'B_avg_SUB_ATT', 'B_losses', 'R_current_win_streak', 'R_avg_SUB_ATT', 'R_losses']
 
+#Function that does the necessary preprocessing steps on new instances 
 def preprocessing(New_data):
     New_data.reset_index(drop=True, inplace=True)
     R_Series = []
@@ -913,22 +914,20 @@ def preprocessing(New_data):
     New_data['Rank_dif'] = New_data['B_rank'] - New_data['R_rank']
     New_data.drop(["R_rank" ,"B_rank"], axis=1, inplace=True)
     
-    
+    #just creates the diff columns manually
     for j in range(len(mixed_dif)):
-        for i in range(New_data.shape[0]):
-            if ~(New_data[mixed_B[j]] - New_data[mixed_R[j]] == New_data[mixed_dif[j]])[i]:
-                New_data[mixed_dif[j]][i] = New_data[mixed_B[j]][i] - New_data[mixed_R[j]][i] 
+        New_data[mixed_dif[j]] = New_data[mixed_B[j]] - New_data[mixed_R[j]]
     
     New_data_prepared = Column_trans.transform(New_data)
     New_data_prepared_df = pd.DataFrame(New_data_prepared, columns=Column_trans.get_feature_names_out(), index=New_data.index)
     
-   
+   #changing the names for sqrt ans cbrt columns
     for col in sqrt_cols:
         New_data_prepared_df['sqrt_'+col] = New_data_prepared_df[col]
     
-    
-    
     New_data_prepared_df.drop(['B_avg_SIG_STR_landed', 'B_avg_TD_landed', 'B_longest_win_streak', 'B_total_rounds_fought', 'B_wins', 'R_avg_SIG_STR_landed', 'R_avg_TD_landed', 'R_longest_win_streak', 'R_total_rounds_fought', 'R_wins'], axis=1, inplace=True)
+    
+    
     
     for col in cbrt_cols:
         New_data_prepared_df['cbrt_'+col] = New_data_prepared_df[col]
@@ -936,7 +935,7 @@ def preprocessing(New_data):
     New_data_prepared_df.drop(['B_current_win_streak', 'B_avg_SUB_ATT', 'B_losses', 'R_current_win_streak', 'R_avg_SUB_ATT', 'R_losses'], axis=1, inplace=True)
     
     
-    
+    #making sure the dataframe has the same order in columns to be sure that pca produces similar results
     New_data_prepared_df = New_data_prepared_df[cols_in_order]
     X_final = standar_pca_pipeline.transform(New_data_prepared_df)
     X_final_df = pd.DataFrame(X_final, columns=standar_pca_pipeline.get_feature_names_out(), index=New_data.index)
@@ -959,7 +958,7 @@ print(k)
 prepro_data = preprocessing(df1)
 
 
-
+#list of all the essential columns needed for both fighters
 essential_cols_1 = sq_cb_cols + rest_cols + mixed_B + mixed_R + mixed_dif + R_weight_classes + B_weight_classes
 essential_cols = list(set(essential_cols_1))
 essential_cols.append("R_fighter")
@@ -969,33 +968,56 @@ df_ess
 df_R_1 = df_ess.copy()
 df_R_1['B_fighter'].unique()
 
+#in the original dataframe (df) we find some fighters multiple times in both the red and blue corner
+
+#This will make a list of all the unique fighters that are found on the R_fighter column but not in the B_fighter
 fighters_unique_in_red_not_in_blue = []
 for fighter in df['R_fighter'].unique():
     if fighter not in df['B_fighter'].unique():
         fighters_unique_in_red_not_in_blue.append(fighter)
 
 len(fighters_unique_in_red_not_in_blue)
+#This will make a list of all the unique fighters found on the B_fighter column
+
 fighters_unique_in_blue = []
 for fighter in df['B_fighter'].unique():
     fighters_unique_in_blue.append(fighter)
     
 fighters_unique_in_blue
 
+#full list of fighters
 unique_fighters_names = fighters_unique_in_blue + fighters_unique_in_red_not_in_blue
 
+#this function will take a list and return all dublicate values in it
+def duplicate_names(list):
+    uniqueList_final = []
+    duplicateList_final = []
+    
+    for i in list:
+        if i not in uniqueList_final:
+            uniqueList_final.append(i)
+        elif i not in duplicateList_final:
+            duplicateList_final.append(i)
+    return duplicateList_final
+
+duplicate_names(unique_fighters_names)
 
 
 ids_of_reds = []
-names = []
+names_R = []
 
+#id's of the unique red fighters in the df_R_1 dataset
 for index in df_R_1.index:
-    if ((df_R_1['R_fighter'][index] in fighters_unique_in_red_not_in_blue) and (df_R_1['R_fighter'][index] not in names)):
-        names.append(df_R_1['R_fighter'][index])
+    if ((df_R_1['R_fighter'][index] in fighters_unique_in_red_not_in_blue) and (df_R_1['R_fighter'][index] not in names_R)):
+        names_R.append(df_R_1['R_fighter'][index])
         ids_of_reds.append(index)
 
 
 len(ids_of_reds)
-len(names)
+len(names_R)
+
+duplicate_names(ids_of_reds)
+duplicate_names(names_R)
 
 R_cols = []
 
@@ -1010,9 +1032,11 @@ for col in df_R_1.columns:
         B_cols.append(col)
      
 len(R_cols)   
+#df_R is a dataframe of the unique fighters found, and their characteristics 
 df_R = df_R_1.iloc[ids_of_reds][R_cols].reset_index(drop=True)
 df_R.columns
 
+#will remove the R_ prefix on the columns
 columns_without_R = [col.replace('R_', '', 1) for col in df_R.columns]
 renaming = {}
 for i in range(df_R.shape[1]):
@@ -1023,6 +1047,7 @@ renaming
 df_R = df_R.rename(columns=renaming)
 df_R
 
+#all the same for the unique fighters found on blue corner
 df_B_1 = df_ess.copy()
 
 ids_of_blues = []
@@ -1037,10 +1062,18 @@ for index in df_B_1.index:
 len(ids_of_blues)
 len(names_B)
 
+
+duplicate_names(ids_of_blues)
+duplicate_names(names_B)
+
+all_names = names_B + names_R
+
+duplicate_names(all_names)
+
 B_cols = []
 
 for col in df_B_1.columns:
-    if col.startswith('B'):B_cols
+    if col.startswith('B'):
         B_cols.append(col)
         
 
@@ -1058,72 +1091,70 @@ renaming_B
 df_B = df_B.rename(columns=renaming_B)
 df_B
 
-unique_fighters_stats = pd.concat([df_R, df_B], ignore_index=True) 
+duplicate_names(df_B['fighter'])
 
+duplicate_names(df_R['fighter'])
+
+
+#then will merge the two datasets into one containing unique fighters and their characteristics 
+unique_fighters_stats = pd.concat([df_R, df_B], ignore_index=True)
+duplicate_names(unique_fighters_stats['fighter']) 
+
+#will lower case, remove symbols and spaces on all fighters names
 lower_case = unique_fighters_stats['fighter'].map(lambda x: x.lower() if isinstance(x,str) else x)
-re.sub(r'[^\w]', ' ', s)
 remove_symbols = lower_case.map(lambda x: re.sub(r'[^\w]', ' ', x))
 remove_spaces = remove_symbols.str.replace(" ", "")
 
 unique_fighters_stats['fighter'] = remove_spaces
 unique_fighters_stats
+duplicate_names(unique_fighters_stats['fighter']) 
 
 #unique_fighters_stats.to_csv('unique_fighters_stats.csv', index=False)
 unique_fighters_stats = pd.read_csv("./unique_fighters_stats.csv")
 
-uniqueList = []
-duplicateList = []
- 
-for i in list(unique_fighters_stats['fighter']):
-    if i not in uniqueList:
-        uniqueList.append(i)
-    elif i not in duplicateList:
-        duplicateList.append(i)
 
-duplicateList
+
+duplicateList = duplicate_names(list(unique_fighters_stats['fighter']))
 
 
 for dupl_fight in duplicateList:
     print(len(unique_fighters_stats[unique_fighters_stats['fighter'] == dupl_fight]))
     
-#somehow there are 7 dublicates
+#there are 7 dublicates one for each name on duplicateList because they were written in a different way and ended up the same after lowercasing removing symbols and removing white space (Da Un Jung, Da-Un Jung for example)
 
+
+#locate and drop the remaining dublicates
 list_of_dub_idx = []
 
 for fighter in duplicateList:
-    list_of_dub_idx.append(unique_fighters_stats[unique_fighters_stats['fighter'] == fighter].index[0])
+    list_of_dub_idx.append(unique_fighters_stats[unique_fighters_stats['fighter'] == fighter].index[1])
     
 list_of_dub_idx
 
 unique_fighters_stats_final = unique_fighters_stats.drop(list_of_dub_idx, axis=0)
 #unique_fighters_stats_final.to_csv('unique_fighters_stats_final.csv', index=False)
 
-uniqueList_final = []
-duplicateList_final = []
- 
-for i in list(unique_fighters_stats_final['fighter']):
-    if i not in uniqueList_final:
-        uniqueList_final.append(i)
-    elif i not in duplicateList_final:
-        duplicateList_final.append(i)
 
-duplicateList_final
-#Solved
 
-ids_of_reds_final = [x for x in ids_of_reds if (x not in list_of_dub_idx)]
-ids_of_blues_final = [x for x in ids_of_blues if (x not in list_of_dub_idx)]
+duplicate_names(list(unique_fighters_stats_final['fighter']))
+#solved
+
+
+#then will try to make a directory with weights (of weightclasses) as keys and all the fighters in the corresponding weight class as values
+
 
 for val in df['R_Weight_lbs'].unique():
     print(val)
 
 weights = [115, 125, 135, 145, 155, 170, 185, 205, 265]
-df_unique_red = df.iloc[ids_of_reds_final]
+df_unique_red = df.iloc[ids_of_reds]
 df_unique_red = df_unique_red.reset_index(drop=True)
+#The heavyweight class is over 205 and under 265 pounds, we will put them all on 265
 df_unique_red.loc[(df_unique_red['R_Weight_lbs'] > 206), 'R_Weight_lbs']  = 265
-df_unique_blue = df.iloc[ids_of_blues_final]
+df_unique_blue = df.iloc[ids_of_blues]
 df_unique_blue = df_unique_blue.reset_index(drop=True)
 df_unique_blue.loc[(df_unique_blue['B_Weight_lbs'] > 206), 'B_Weight_lbs']  = 265
-list(df_unique_red[df_unique_red['R_Weight_lbs'] == 115]['R_fighter'])
+
 dict_of_weights = {115 : [], 125: [], 135: [], 145: [], 155: [], 170: [], 185: [], 205: [], 265: []}
 for weight in weights:
     for fighter in list(df_unique_red[df_unique_red['R_Weight_lbs'] == weight]['R_fighter']):
@@ -1136,22 +1167,20 @@ for weight in weights:
 dict_of_weights
 dict_copy = dict_of_weights
 dict_of_weights_final_1 = {115 : [], 125: [], 135: [], 145: [], 155: [], 170: [], 185: [], 205: [], 265: []}
+#The same string transformation as the fighters column of the unique fighters stats dataset
 for weight in dict_copy:
    dict_of_weights_final_1[weight].append([re.sub(r'[^\w]', ' ', x.lower()).replace(" ", "") for x in dict_of_weights[weight]])
+
 
 for weight in dict_of_weights_final_1:
     dict_of_weights_final_1[weight] = dict_of_weights_final_1[weight][0]
 
 dict_of_weights_final_1
 
-check_num = 0
-for weight in dict_of_weights_final_1:
-    check_num = check_num + len(dict_of_weights_final_1[weight])
-
-check_num
 
 
 
+#check dublicate values
 uniqueList = []
 duplicateList = []
  
@@ -1164,49 +1193,85 @@ for weight in dict_of_weights_final_1:
 
 duplicateList
 
+dict_copy_1 = dict_of_weights_final_1.copy()
+
+#remove the dublicates (same 7 as the dataset, as expected)
+for weight in dict_copy_1:
+    for fighter in duplicateList:
+        if fighter in dict_copy_1[weight]:
+            dict_copy_1[weight].remove(fighter)
 
 
+uniqueList_1 = []
+duplicateList_1 = []
 
+for weight in dict_copy_1:
+    for i in dict_copy_1[weight]:
+        if i not in uniqueList_1:
+            uniqueList_1.append(i)
+        elif i not in duplicateList_1:
+            duplicateList_1.append(i)
+
+duplicateList_1
+#empty
+
+fighters_in_weight_classes = dict_copy_1.copy()
+#final directory copied into results.py
+fighters_in_weight_classes
+#verify number of values
+check_num = 0
+for weight in fighters_in_weight_classes:
+    check_num = check_num + len(fighters_in_weight_classes[weight])
+
+check_num
+
+
+#this is the function copied into results.py
+#This function takes two names as inputs (one for each corner) and if certain criterion is met it outputs a dataset containing the features of them two in the correct form for our preprocessing function to use 
 def X_from_names(red_corner_name, blue_corner_name):
-
-    red_name_adj = re.sub(r'[^\w]', ' ', red_corner_name.lower()).replace(" ", "")
-    blue_name_adj = re.sub(r'[^\w]', ' ', blue_corner_name.lower()).replace(" ", "")
-
-    for pos_weight in dict_of_weights_final_1:
-        for name in dict_of_weights_final_1[pos_weight]:
-            if name == red_name_adj:
-                red_weight = pos_weight  
     
-    if blue_name_adj not in dict_of_weights_final_1[red_weight]:
-        return print("The fighters are not in the same weight class") 
 
-    if ((red_name_adj not in list(unique_fighters_stats['fighter'])) and (blue_name_adj not in list(unique_fighters_stats['fighter']))):
+    #make the string transformations to make them the same form as the fighters column of the unique_fighters_stats_final dataset
+    red_name_adj = re.sub(r'[^\w]', ' ', str(red_corner_name).lower()).replace(" ", "")
+    blue_name_adj = re.sub(r'[^\w]', ' ', str(blue_corner_name).lower()).replace(" ", "")
+
+
+    #checks if the fighters name are in the unique_fighters_stats_final['fighter'] column, if not returns the fact.
+    if ((red_name_adj not in list(unique_fighters_stats_final['fighter'])) and (blue_name_adj not in list(unique_fighters_stats_final['fighter']))):
         return print("Both given names are not in the list")
-    if red_name_adj not in list(unique_fighters_stats['fighter']):
+    if red_name_adj not in list(unique_fighters_stats_final['fighter']):
         return print("The name given in the red corner is not in the list")
-    if blue_name_adj not in list(unique_fighters_stats['fighter']):
-        return print("The name given in the blue corner is not in the list")  
-    
+    if blue_name_adj not in list(unique_fighters_stats_final['fighter']):
+        return print("The name given in the blue corner is not in the list")   
     if red_name_adj == blue_name_adj:
         return print("You gave the same name in both corners") 
     
+    #checks if the fighters are in the same weight class using the fighters_in_weight_classes directory,returns a printed a message if not
+    for pos_weight in fighters_in_weight_classes:
+        for name in fighters_in_weight_classes[pos_weight]:
+            if name == red_name_adj:
+                red_weight = pos_weight  
+    
+    if blue_name_adj not in fighters_in_weight_classes[red_weight]:
+        return print("The fighters are not in the same weight class") 
     
     
-    if (red_name_adj in list(unique_fighters_stats['fighter'])):
-        R_frame = unique_fighters_stats[unique_fighters_stats['fighter'] == red_name_adj]
+    #if the name in the red corner is in the list, will save his features,add a prefix R_ on them and reset the index 
+    if (red_name_adj in list(unique_fighters_stats_final['fighter'])):
+        R_frame = unique_fighters_stats_final[unique_fighters_stats_final['fighter'] == red_name_adj]
         R_frame_adj = R_frame.add_prefix('R_')
         R_frame_adj = R_frame_adj.reset_index(drop=True)
    
-       
-    if (blue_name_adj in list(unique_fighters_stats['fighter'])):
-        B_frame = unique_fighters_stats[unique_fighters_stats['fighter'] == blue_name_adj]
+    #same for the blue corner name
+    if (blue_name_adj in list(unique_fighters_stats_final['fighter'])):
+        B_frame = unique_fighters_stats_final[unique_fighters_stats_final['fighter'] == blue_name_adj]
         B_frame_adj = B_frame.add_prefix('B_')
         B_frame_adj = B_frame_adj.reset_index(drop=True)
 
-        
+    #will merge the two datasets and return the full one
     X_without_pre = pd.merge(R_frame_adj, B_frame_adj, left_index=True, right_index=True)
     return X_without_pre
     
-    
-X_from_names('caludiagadelha', 'jessicaandrade')
+
+X_from_names('arianecarnelossi', 'montserratconejo')
 
