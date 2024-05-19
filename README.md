@@ -1,5 +1,4 @@
-This is a model that predicts the winner of a ufc fight.It consist of an ensemble of four models (Neural network, XGBClassifier, RandomForestClassifier, GaussianNB) whose prediction's are used on a 
-LogisticRegression meta learner for the final result.The model achieved 0.72 precision for 0.13 recall on the test set.
+This is a model that predicts the winner of a ufc fight. It consist of an ensemble of four models (Neural network, XGBClassifier, RandomForestClassifier, GaussianNB) whose prediction's are used on a LogisticRegression meta learner for the final result. The model achieved 0.72 precision for 0.13 recall on the test set.
 
 The dataset is from https://www.kaggle.com/datasets/mdabbert/ultimate-ufc-dataset
 
