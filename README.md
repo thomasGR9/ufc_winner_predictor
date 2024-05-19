@@ -8,5 +8,5 @@ The tryouts.py file has all the model building, hyperparameter tuning and evalua
 
 The results.py contains all the necessary components (models, datasets, pipelines etc) for the model to work and the prediction function. It is the file used in deployment
 
-The fighters_per_weightclass_list is a list of all the available fighters to use in the deployed model (The model uses a dataset containing these names and their stats, 
-their stats, and new fighters additions, can updated.As per now this dataset contains information collected in 2021.
+The fighters_per_weightclass_list is a list of all the available fighters to use in the deployed model
+The model uses a dataset (made in ufc ufc_winner_predictor.py file) containing these names and their stats. This dataset can be updated for future usage. As per now the stats are collected in 2021
