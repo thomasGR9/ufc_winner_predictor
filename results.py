@@ -1,33 +1,23 @@
 import pickle
-import tensorflow as tf
 from keras.models import load_model
 import pandas as pd
 import re
 import warnings
+from pathlib import Path
 warnings.filterwarnings("ignore")
 
 
-unique_fighters_stats_final = pd.read_csv("./unique_fighters_stats_final.csv")
 
-with open("top_mod_RFC.pkl", "rb") as f:
-    top_mod_RFC = pickle.load(f)
 
-with open("top_mod_XGB.pkl", "rb") as f:
-    top_mod_XGB = pickle.load(f)
-    
-with open("bayes.pkl", "rb") as f:
-    bayes = pickle.load(f)
-    
-with open("meta_learner.pkl", "rb") as f:
-    meta_learner = pickle.load(f)
-    
-top_mod_NN = tf.keras.models.load_model('./61acc.h5')
+BASE_DIR = Path(__file__).resolve(strict=True).parent
 
-with open("Colum_transf.pkl", "rb") as f:
-    Column_trans = pickle.load(f)
+unique_fighters_stats_final = pd.read_csv(f"{BASE_DIR}/unique_fighters_stats_final.csv")
 
-with open("standar_pca_pipe.pkl", "rb") as f:
-    standar_pca_pipeline = pickle.load(f)
+
+
+
+
+
 
 R_weight_classes = ["R_Women's Featherweight_rank", "R_Women's Strawweight_rank", "R_Women's Bantamweight_rank", 'R_Heavyweight_rank', 'R_Light Heavyweight_rank', 'R_Middleweight_rank', 'R_Welterweight_rank', 'R_Lightweight_rank', 'R_Featherweight_rank', 'R_Bantamweight_rank', 'R_Flyweight_rank']
 B_weight_classes = ["B_Women's Featherweight_rank", "B_Women's Strawweight_rank", "B_Women's Bantamweight_rank", 'B_Heavyweight_rank', 'B_Light Heavyweight_rank', 'B_Middleweight_rank', 'B_Welterweight_rank', 'B_Lightweight_rank', 'B_Featherweight_rank', 'B_Bantamweight_rank', 'B_Flyweight_rank']
@@ -1829,16 +1819,20 @@ def X_from_names(red_corner_name, blue_corner_name):
     red_name_adj = re.sub(r'[^\w]', ' ', str(red_corner_name).lower()).replace(" ", "")
     blue_name_adj = re.sub(r'[^\w]', ' ', str(blue_corner_name).lower()).replace(" ", "")
 
-
+    
     #checks if the fighters name are in the unique_fighters_stats_final['fighter'] column, if not returns the fact.
     if ((red_name_adj not in list(unique_fighters_stats_final['fighter'])) and (blue_name_adj not in list(unique_fighters_stats_final['fighter']))):
-        return print("Both given names are not in the list")
+        error_message = "Both given names are not in the list"
+        return error_message
     if red_name_adj not in list(unique_fighters_stats_final['fighter']):
-        return print("The name given in the red corner is not in the list")
+        error_message = "The name given in the red corner is not in the list"
+        return error_message
     if blue_name_adj not in list(unique_fighters_stats_final['fighter']):
-        return print("The name given in the blue corner is not in the list")   
+        error_message = "The name given in the blue corner is not in the list"
+        return error_message
     if red_name_adj == blue_name_adj:
-        return print("You gave the same name in both corners") 
+        error_message = "You gave the same name in both corners"
+        return error_message
     
     #checks if the fighters are in the same weight class using the fighters_in_weight_classes directory,returns a printed a message if not
     for pos_weight in fighters_in_weight_classes:
@@ -1847,7 +1841,8 @@ def X_from_names(red_corner_name, blue_corner_name):
                 red_weight = pos_weight  
     
     if blue_name_adj not in fighters_in_weight_classes[red_weight]:
-        return print("The fighters are not in the same weight class") 
+        error_message = "The fighters are not in the same weight class"
+        return error_message
     
     
     #if the name in the red corner is in the list, will save his features,add a prefix R_ on them and reset the index 
@@ -1868,6 +1863,12 @@ def X_from_names(red_corner_name, blue_corner_name):
 
 
 def preprocessing(New_data):
+    with open(f"{BASE_DIR}/Colum_transf.pkl", "rb") as f:
+        Column_trans = pickle.load(f)
+
+    with open(f"{BASE_DIR}/standar_pca_pipe.pkl", "rb") as f:
+        standar_pca_pipeline = pickle.load(f)
+        
     New_data.reset_index(drop=True, inplace=True)
     R_Series = []
     B_Series = []
@@ -1923,6 +1924,17 @@ def preprocessing(New_data):
 
 
 def meta_learner_input(test_set_x):
+    with open(f"{BASE_DIR}/top_mod_RFC.pkl", "rb") as f:
+        top_mod_RFC = pickle.load(f)
+
+    with open(f"{BASE_DIR}/top_mod_XGB.pkl", "rb") as f:
+        top_mod_XGB = pickle.load(f)
+
+    with open(f"{BASE_DIR}/bayes.pkl", "rb") as f:
+        bayes = pickle.load(f)
+
+    top_mod_NN = load_model(f"{BASE_DIR}/61acc.h5")
+    
     XGB_pred = top_mod_XGB.predict_proba(test_set_x)
     RFC_pred = top_mod_RFC.predict_proba(test_set_x)
     bayes_pred = bayes.predict_proba(test_set_x)
@@ -1936,9 +1948,11 @@ def meta_learner_input(test_set_x):
 
 
 def results(red_corner_name, blue_corner_name):
+    with open(f"{BASE_DIR}/meta_learner.pkl", "rb") as f:
+        meta_learner = pickle.load(f)
     X_New_Instance = X_from_names(red_corner_name = red_corner_name, blue_corner_name = blue_corner_name)
-    if (type(X_New_Instance) == type(print(""))):
-        return 
+    if (type(X_New_Instance) == str):
+        return X_New_Instance
     X_New_Instance_preprocessed_df =  preprocessing(New_data = X_New_Instance)
     meta_learner_input_df = meta_learner_input(test_set_x = X_New_Instance_preprocessed_df)
     preds = meta_learner.predict_proba(meta_learner_input_df)
@@ -1950,7 +1964,9 @@ def results(red_corner_name, blue_corner_name):
         winner = "Red corner"
         winner_probability = round((1 - winner_blue_corner_proba[0]), 2)
     elif (winner_blue_corner_proba[0] == 0.5):
-        return print("The predicted probability is equal for both corners")
-    print(f"The winner is the fighter in the {winner} with predicted probability = {winner_probability}\nWith this predicted probability as threshold, the model achieved {Threshold_prec_dict[winner_probability]} precision in the test set\n\n")
+        output_message_eq = "The predicted probability is equal for both corners"
+        return output_message_eq
+    output_message = f"The winner is the fighter in the {winner} with predicted probability = {winner_probability}.With this predicted probability as threshold, the model achieved {Threshold_prec_dict[winner_probability]} precision in the test set."
+    return output_message
     
 
