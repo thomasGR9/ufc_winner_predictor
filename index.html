@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fighter Input</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <div class="input-group">
+            <label for="red-corner">Red Corner Fighter:</label>
+            <input type="text" id="red-corner" name="red-corner-fighter">
+        </div>
+        <div class="input-group">
+            <label for="blue-corner">Blue Corner Fighter:</label>
+            <input type="text" id="blue-corner" name="blue-corner-fighter">
+        </div>
+        <div class="button-group">
+            <button onclick="getPrediction()">Predict Winner</button>
+        </div>
+        <div class="result-box" id="result-box">
+            Enter fighter names and click "Predict Winner" to see the result here.
+        </div>
+        <div class="link-group">
+            <a href="https://github.com/thomasGR9/ufc_winner_predictor/blob/main/fighters_per_weightclass_list" target="_blank">See list of available fighters</a>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
