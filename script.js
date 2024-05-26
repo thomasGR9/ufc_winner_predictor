@@ -9,7 +9,7 @@ function getPrediction() {
     }
 
     const xhr = new XMLHttpRequest();
-    xhr.open('POST', 'https://ufc-winner-predictor-ee463ee67161.herokuapp.com', true);
+    xhr.open('POST', 'https://www.apiforufcpredictor.site', true);
     xhr.setRequestHeader('Content-Type', 'application/json');
 
     xhr.onreadystatechange = function() {
