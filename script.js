@@ -9,7 +9,7 @@ function getPrediction() {
     }
 
     const xhr = new XMLHttpRequest();
-    xhr.open('POST', 'https://cors-anywhere.herokuapp.com/https://www.apiforufcpredictor.site/predict_winner', true);
+    xhr.open('POST', 'https://blooming-tundra-18490-5377731e1c28.herokuapp.com/https://www.apiforufcpredictor.site/predict_winner', true);
     xhr.setRequestHeader('Content-Type', 'application/json');
 
     xhr.onreadystatechange = function() {
