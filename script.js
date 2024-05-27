@@ -9,7 +9,7 @@ function getPrediction() {
     }
 
     const xhr = new XMLHttpRequest();
-    xhr.open('POST', 'https://www.apiforufcpredictor.site', true);
+    xhr.open('POST', 'https://cors-anywhere.herokuapp.com/https://www.apiforufcpredictor.site/predict_winner', true);
     xhr.setRequestHeader('Content-Type', 'application/json');
 
     xhr.onreadystatechange = function() {
