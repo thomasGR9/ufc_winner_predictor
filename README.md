@@ -8,8 +8,8 @@ The dataset used is from [Kaggle's Ultimate UFC Dataset](https://www.kaggle.com/
 
 ## Project Structure
 
-- **ufc_winner_predictor.py**: Contains all the preprocessing steps applied to the original data and the preprocessing function used in the deployed model.
-- **tryouts.py**: Includes all model building, hyperparameter tuning, and evaluations.
+- **ufc_winner_predictor.py**: Contains all the preprocessing steps applied to the original data, the preprocessing function used in the deployed model and the fighters_per_weightclass_list. The preprocessing includes: Feature engineering, imputations, making stratified train and test sets, outlier detection, scaling, PCA.
+- **tryouts.py**: Includes all model building, hyperparameter tuning, and evaluations. These invovle: The keras tuner library for NN hyperparameter tuning, tranfer learning techniques to use the trained model on other features, bayesian hyperparameter search for RFC, XGB and meta learner and some costum functions to evaluate precision and recall of the models for both classes.
 - **results.py**: Contains all necessary components (models, datasets, pipelines, etc.) for the model to work and the prediction function. This file is used in deployment.
 - **fighters_per_weightclass_list**: A list of all available fighters to use in the deployed model. The model uses a dataset (created in ufc_winner_predictor.py) containing these names and their stats. This dataset can be updated for future usage; currently, the stats are collected up to 2021.
 
